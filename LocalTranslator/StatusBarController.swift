@@ -18,6 +18,14 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     private let onPopoverWillShow: () -> Void
     private let onOpenSettings: () -> Void
 
+    /// Monitor global de clics. `addGlobalMonitorForEvents` solo recibe
+    /// eventos que van a OTRAS apps, así que un click fuera del popover lo
+    /// dispara siempre, incluso cuando el `behavior = .transient` se queda
+    /// "atontado" tras abrir un `Menu`/`Picker` de SwiftUI (es el caso del
+    /// menú de tonos: tras seleccionar una opción, el popover dejaba de
+    /// cerrarse al pinchar en otra ventana).
+    private var globalClickMonitor: Any?
+
     init<RootView: View>(
         rootView: RootView,
         onPopoverDidClose: @escaping () -> Void = {},
@@ -73,6 +81,9 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
 
     deinit {
         NotificationCenter.default.removeObserver(self)
+        if let monitor = globalClickMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
     }
 
     @objc private func handleAppResignActive(_ notification: Notification) {
@@ -100,6 +111,30 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         // Pasamos foco a la ventana del popover para que reciba teclas.
         popover.contentViewController?.view.window?.makeKey()
+        startGlobalClickMonitor()
+    }
+
+    // MARK: - Monitor de clics fuera de la app
+
+    private func startGlobalClickMonitor() {
+        guard globalClickMonitor == nil else { return }
+        globalClickMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        ) { [weak self] _ in
+            // El monitor global solo recibe eventos de otras apps, así que
+            // cualquier click aquí es por definición fuera del popover.
+            Task { @MainActor [weak self] in
+                guard let self, self.popover.isShown else { return }
+                self.popover.performClose(nil)
+            }
+        }
+    }
+
+    private func stopGlobalClickMonitor() {
+        if let monitor = globalClickMonitor {
+            NSEvent.removeMonitor(monitor)
+            globalClickMonitor = nil
+        }
     }
 
     @objc private func handleClick(_ sender: Any?) {
@@ -167,6 +202,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
 
     nonisolated func popoverDidClose(_ notification: Notification) {
         MainActor.assumeIsolated {
+            stopGlobalClickMonitor()
             onPopoverDidClose()
         }
     }

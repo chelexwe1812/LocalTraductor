@@ -378,6 +378,61 @@
         }
       }
     },
+    "Casual" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Casual"
+          }
+        }
+      }
+    },
+    "Formal" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Formal"
+          }
+        }
+      }
+    },
+    "Neutro" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neutral"
+          }
+        }
+      }
+    },
+    "Técnico" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Technical"
+          }
+        }
+      }
+    },
+    "Tono de traducción" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Translation tone"
+          }
+        }
+      }
+    },
     "Vaciar al cerrar" : {
       "extractionState" : "manual",
       "localizations" : {

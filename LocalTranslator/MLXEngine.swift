@@ -87,7 +87,8 @@ actor MLXEngine: TranslationEngine {
 
     func translate(_ text: String,
                    from source: Language,
-                   to target: Language) async throws -> AsyncThrowingStream<String, Error> {
+                   to target: Language,
+                   tone: TranslationTone) async throws -> AsyncThrowingStream<String, Error> {
 
         guard let session else { throw EngineError.modelNotLoaded }
 
@@ -102,9 +103,13 @@ actor MLXEngine: TranslationEngine {
         // para que el modelo no use traducciones previas como contexto.
         await session.clear()
 
+        // Inyectamos la directiva de tono dentro del bloque de instrucciones
+        // del prompt de usuario (NO en el system prompt). De este modo
+        // cambiar de tono no obliga a reconstruir la `ChatSession`.
+        let toneClause = tone.instruction.map { " " + $0 } ?? ""
         let prompt = """
         Translate the following text from \(source.englishName) \
-        to \(target.englishName). Output ONLY the translation.
+        to \(target.englishName).\(toneClause) Output ONLY the translation.
 
         \(trimmed)
         """

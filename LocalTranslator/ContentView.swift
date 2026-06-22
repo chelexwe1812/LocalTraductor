@@ -41,6 +41,15 @@ struct ContentView: View {
                   !text.hasPrefix("⚠️") else { return }
             copyToClipboard(text)
         }
+        .onChange(of: settings.translationTone) { _, _ in
+            // Al cambiar de tono, re-traducimos al instante si hay algo que
+            // traducir. Si el input está vacío no hacemos nada para no
+            // disparar trabajo inútil. El feedback visual (borde arcoíris)
+            // lo dispara `SiriGlow` al ver `isTranslating = true`.
+            let trimmed = viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            viewModel.translate()
+        }
     }
 
     // MARK: - Vista del traductor
@@ -94,6 +103,9 @@ struct ContentView: View {
                 .padding(.vertical, 10)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Borde arcoíris estilo Siri: aparece cuando arranca una traducción
+        // y se desvanece cuando termina. El overlay no captura clics.
+        .overlay { SiriGlow(isTranslating: viewModel.isTranslating) }
         // Progress + copia como overlay en la esquina superior derecha,
         // así no roban espacio vertical al texto traducido.
         .overlay(alignment: .topTrailing) {
@@ -117,10 +129,23 @@ struct ContentView: View {
     }
 
     // MARK: - Barra inferior (pickers + acciones)
+    /// Prioridad de espacio: los nombres de los idiomas mandan. Solo cuando
+    /// quepa la etiqueta del tono junto al icono ✦, `ViewThatFits` la incluye;
+    /// en caso contrario, cae a la variante compacta con solo icono.
     private var bottomBar: some View {
+        ViewThatFits(in: .horizontal) {
+            barContent(showToneLabel: true)
+            barContent(showToneLabel: false)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+    }
+
+    @ViewBuilder
+    private func barContent(showToneLabel: Bool) -> some View {
         @Bindable var bindable = viewModel
 
-        return HStack(spacing: 10) {
+        HStack(spacing: 10) {
             languagePicker(selection: $bindable.sourceLanguage, includeAutoDetect: true)
 
             Button {
@@ -134,7 +159,12 @@ struct ContentView: View {
 
             languagePicker(selection: $bindable.targetLanguage, includeAutoDetect: false)
 
-            Spacer()
+            // `minLength` evita que el Spacer se colapse a 0 dentro de
+            // `ViewThatFits`: así la variante con etiqueta solo "cabe" si
+            // queda hueco real entre los pickers y los iconos de acción.
+            Spacer(minLength: 8)
+
+            toneMenu(showLabel: showToneLabel)
 
             Button {
                 viewModel.clearInput()
@@ -155,8 +185,6 @@ struct ContentView: View {
             .buttonStyle(.borderless)
             .help("Configuración")
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
     }
 
     // MARK: - Estado del modelo (banner superior)
@@ -183,6 +211,43 @@ struct ContentView: View {
             .foregroundStyle(color)
             .clipShape(Capsule())
             .padding(.top, 4)
+    }
+
+    // MARK: - Menú de tono de traducción
+    /// Selector con estrella (✦) que cambia el registro con el que el modelo
+    /// devuelve la traducción. Si `showLabel` es `true` muestra también el
+    /// nombre del tono activo al lado del icono; si no, solo icono. La
+    /// decisión la toma `ViewThatFits` en `bottomBar` según el espacio
+    /// disponible (los nombres de los idiomas tienen prioridad).
+    private func toneMenu(showLabel: Bool) -> some View {
+        Menu {
+            ForEach(TranslationTone.allCases) { tone in
+                Button {
+                    settings.translationTone = tone
+                } label: {
+                    if tone == settings.translationTone {
+                        Label(tone.displayName, systemImage: "checkmark")
+                    } else {
+                        Text(tone.displayName)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 16, weight: .semibold))
+                if showLabel {
+                    Text(settings.translationTone.displayName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Tono de traducción")
     }
 
     // MARK: - Picker de idioma (label clicable encima de cada cuadro)
@@ -229,6 +294,84 @@ struct ContentView: View {
     private func copyToClipboard(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
+    }
+}
+
+/// Borde arcoíris estilo Siri que envuelve el área de salida mientras dura
+/// una traducción. Usa `hueRotation` porque `AngularGradient` no expone su
+/// ángulo como propiedad animable; rotar el matiz produce el mismo efecto
+/// "arcoíris en movimiento" sin recrear el gradiente cada frame.
+///
+/// Nota crítica: el bucle no puede consultar `isTranslating` (un `let` del
+/// struct) dentro del `completion:` del `withAnimation`, porque ese closure
+/// captura `self` por valor y deja el flag congelado al instante en que
+/// arrancó la vuelta — eso provocaba que el efecto siguiera para siempre.
+/// La solución es espejar el flag en un `@State` (`loopActive`), que sí
+/// vive en storage externo y devuelve el valor actual aunque se lea desde
+/// un `self` capturado.
+private struct SiriGlow: View {
+    let isTranslating: Bool
+
+    @State private var hue: Double = 0
+    @State private var opacity: Double = 0
+    /// Espejo de `isTranslating` accesible desde closures asíncronos.
+    @State private var loopActive: Bool = false
+    /// Invalida bucles previos si la traducción reinicia antes de que la
+    /// vuelta en curso termine su animación lineal.
+    @State private var generation: Int = 0
+
+    var body: some View {
+        Rectangle()
+            .strokeBorder(
+                AngularGradient(
+                    colors: [.purple, .pink, .blue, .cyan, .mint, .purple],
+                    center: .center
+                ),
+                lineWidth: 3
+            )
+            .blur(radius: 5)
+            .hueRotation(.degrees(hue))
+            .opacity(opacity)
+            .allowsHitTesting(false)
+            .onChange(of: isTranslating) { _, newValue in
+                if newValue {
+                    start()
+                } else {
+                    // Marcamos el final del bucle; la vuelta lineal en curso
+                    // termina su giro y al llegar al `completion:` ve
+                    // `loopActive = false` y desvanece la opacidad.
+                    loopActive = false
+                }
+            }
+    }
+
+    private func start() {
+        generation &+= 1
+        let myGen = generation
+        loopActive = true
+        hue = 0
+        withAnimation(.easeOut(duration: 0.18)) {
+            opacity = 0.9
+        }
+        rotate(gen: myGen)
+    }
+
+    /// Una vuelta de 360° del matiz. Al completarse, decide si sigue dando
+    /// vueltas (traducción aún en curso) o si se desvanece (terminó).
+    private func rotate(gen: Int) {
+        guard gen == generation else { return }
+        withAnimation(.linear(duration: 1.4)) {
+            hue += 360
+        } completion: {
+            guard gen == generation else { return }
+            if loopActive {
+                rotate(gen: gen)
+            } else {
+                withAnimation(.easeIn(duration: 0.5)) {
+                    opacity = 0
+                }
+            }
+        }
     }
 }
 

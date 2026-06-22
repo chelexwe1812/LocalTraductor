@@ -30,6 +30,19 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     }
 }
 
+/// Nombre legible del tono para mostrar en el menú. Vive aquí (capa SwiftUI)
+/// para mantener `TranslationTone` libre de dependencias de UI.
+extension TranslationTone {
+    var displayName: LocalizedStringKey {
+        switch self {
+        case .neutral: return "Neutro"
+        case .formal: return "Formal"
+        case .casual: return "Casual"
+        case .technical: return "Técnico"
+        }
+    }
+}
+
 /// Preferencia del usuario para el modo de color de la UI.
 enum ColorSchemePreference: String, CaseIterable, Identifiable {
     case system
@@ -120,6 +133,12 @@ final class AppSettings {
         didSet { UserDefaults.standard.set(appLanguage.rawValue, forKey: Keys.appLanguage) }
     }
 
+    /// Tono / registro con el que el modelo debe devolver la traducción.
+    /// El `TranslationViewModel` lee este valor en cada llamada al motor.
+    var translationTone: TranslationTone {
+        didSet { UserDefaults.standard.set(translationTone.rawValue, forKey: Keys.translationTone) }
+    }
+
     private init() {
         let d = UserDefaults.standard
         // .bool(forKey:) devuelve false si no existe → defaults seguros.
@@ -154,6 +173,12 @@ final class AppSettings {
         } else {
             self.appLanguage = .spanish
         }
+        if let raw = d.string(forKey: Keys.translationTone),
+           let tone = TranslationTone(rawValue: raw) {
+            self.translationTone = tone
+        } else {
+            self.translationTone = .neutral
+        }
     }
 
     private enum Keys {
@@ -164,5 +189,6 @@ final class AppSettings {
         static let translateClipboardOnOpen = "translateClipboardOnOpen"
         static let colorScheme = "colorScheme"
         static let appLanguage = "appLanguage"
+        static let translationTone = "translationTone"
     }
 }

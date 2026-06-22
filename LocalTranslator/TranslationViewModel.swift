@@ -204,13 +204,15 @@ final class TranslationViewModel {
         // Limpiamos para que los deltas vayan apareciendo sobre lienzo en blanco.
         outputText = ""
 
+        let toneSnapshot = settings.translationTone
         translationTask = Task { [weak self] in
             guard let self else { return }
             do {
                 let stream = try await self.engine.translate(
                     textSnapshot,
                     from: self.sourceLanguage,
-                    to: self.targetLanguage
+                    to: self.targetLanguage,
+                    tone: toneSnapshot
                 )
                 var buffer = ""
                 for try await chunk in stream {
