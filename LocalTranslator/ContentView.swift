@@ -41,7 +41,7 @@ struct ContentView: View {
 
             // Barra inferior: pickers de idioma + swap (izquierda) | clear + settings (derecha)
             HStack(spacing: 10) {
-                languagePicker(selection: $bindable.sourceLanguage)
+                languagePicker(selection: $bindable.sourceLanguage, includeAutoDetect: true)
 
                 Button {
                     viewModel.swapLanguages()
@@ -52,7 +52,7 @@ struct ContentView: View {
                 .buttonStyle(.borderless)
                 .help("Intercambiar idiomas")
 
-                languagePicker(selection: $bindable.targetLanguage)
+                languagePicker(selection: $bindable.targetLanguage, includeAutoDetect: false)
 
                 Spacer()
 
@@ -180,11 +180,17 @@ struct ContentView: View {
     }
 
     // MARK: - Picker de idioma (label clicable encima de cada cuadro)
-    private func languagePicker(selection: Binding<Language>) -> some View {
+    /// `includeAutoDetect` solo es `true` en el picker de origen; en destino
+    /// no tiene sentido "Auto Detect" como idioma al que traducir.
+    private func languagePicker(selection: Binding<Language>, includeAutoDetect: Bool) -> some View {
+        let options = includeAutoDetect
+            ? Language.allCases
+            : Language.allCases.filter { $0 != .autoDetect }
+
         // Nota: usamos `Button`s sueltos en vez de un `Picker` dentro del
         // `Menu` porque, en macOS, la combinación renderizaba el menú vacío.
-        Menu {
-            ForEach(Language.allCases) { lang in
+        return Menu {
+            ForEach(options) { lang in
                 Button {
                     selection.wrappedValue = lang
                 } label: {
@@ -197,7 +203,9 @@ struct ContentView: View {
             }
         } label: {
             HStack(spacing: 8) {
-                Text(selection.wrappedValue.displayLabel)
+                // En el botón cerrado mostramos solo el nombre en inglés;
+                // el nombre nativo entre paréntesis aparece dentro del menú.
+                Text(selection.wrappedValue.englishName)
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.down")
                     .font(.system(size: 10, weight: .semibold))

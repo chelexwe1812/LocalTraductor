@@ -18,7 +18,7 @@ final class TranslationViewModel {
     var screen: Screen = .translator
     var inputText: String = "" {
         didSet {
-            if settings.autoDetectLanguage {
+            if sourceLanguage == .autoDetect || settings.autoDetectLanguage {
                 updateDetectedLanguage()
             }
             handleInputChange()
@@ -30,7 +30,18 @@ final class TranslationViewModel {
             // Mantenemos source ≠ target para que el botón ⇄ tenga sentido
             // y el modelo no reciba prompts del tipo "traduce de X a X".
             if sourceLanguage == targetLanguage {
-                targetLanguage = oldValue
+                // Si veníamos de .autoDetect, no podemos devolver eso al
+                // picker de destino (no lo expone). Caemos en un fallback.
+                if oldValue == .autoDetect {
+                    targetLanguage = (sourceLanguage == .english) ? .spanish : .english
+                } else {
+                    targetLanguage = oldValue
+                }
+            }
+            // Al activar auto-detect con texto ya escrito, intentamos detectar
+            // inmediatamente para que el selector salte al idioma real.
+            if sourceLanguage == .autoDetect {
+                updateDetectedLanguage()
             }
         }
     }
@@ -134,6 +145,8 @@ final class TranslationViewModel {
 
     // MARK: - Intercambiar idiomas (botón ⇄)
     func swapLanguages() {
+        // En modo auto sin detección aún, no hay nada que intercambiar.
+        guard sourceLanguage != .autoDetect else { return }
         // El `didSet` de `sourceLanguage` se encarga de mover target al
         // antiguo valor de source cuando los dos coinciden, así que basta
         // con asignar el target al source.
@@ -160,6 +173,26 @@ final class TranslationViewModel {
         }
 
         guard modelState == .ready else { return }
+
+        // Red de seguridad: si seguimos en .autoDetect al pulsar Enter,
+        // forzamos una detección sobre el snapshot. El didSet de inputText
+        // ya intenta detectar mientras se escribe, pero textos muy cortos
+        // se ignoran allí y pueden llegar aquí sin haber actualizado el
+        // picker.
+        if sourceLanguage == .autoDetect {
+            if let detected = detectLanguage(for: textSnapshot) {
+                sourceLanguage = detected
+            } else {
+                outputText = "⚠️ No se pudo detectar el idioma de origen."
+                return
+            }
+        }
+
+        // Si tras detectar coincide con el destino, no hay traducción posible.
+        if sourceLanguage == targetLanguage {
+            outputText = textSnapshot
+            return
+        }
 
         isTranslating = true
         // Limpiamos para que los deltas vayan apareciendo sobre lienzo en blanco.
@@ -208,40 +241,44 @@ final class TranslationViewModel {
 
     // MARK: - Detección de idioma
 
-    /// Detecta el idioma de `inputText` con `NLLanguageRecognizer` (on-device,
-    /// gratis, sin red). Si la confianza supera 0.6, ajusta `sourceLanguage`.
-    /// Texto demasiado corto (< 4 chars) se ignora porque la detección no
-    /// es fiable.
+    /// Pasa `inputText` por el detector y, si hay un idioma fiable,
+    /// actualiza `sourceLanguage` para que el picker refleje la detección.
+    /// Se invoca tanto cuando el usuario eligió `.autoDetect` en el picker
+    /// como cuando tiene activo el ajuste legacy `autoDetectLanguage`.
     private func updateDetectedLanguage() {
-        let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.count >= 4 else { return }
+        guard let detected = detectLanguage(for: inputText) else { return }
+        guard detected != sourceLanguage else { return }
+        sourceLanguage = detected
+    }
+
+    /// Detecta el idioma de `text` con `NLLanguageRecognizer` (on-device,
+    /// gratis, sin red). Devuelve `nil` si el texto es demasiado corto
+    /// (< 4 chars) o si la confianza no supera 0.6.
+    private func detectLanguage(for text: String) -> Language? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 4 else { return nil }
 
         languageRecognizer.reset()
         languageRecognizer.processString(trimmed)
 
         let hypotheses = languageRecognizer.languageHypotheses(withMaximum: 1)
         guard let (language, confidence) = hypotheses.first,
-              confidence >= 0.6 else { return }
+              confidence >= 0.6 else { return nil }
 
-        let detected: Language?
         switch language {
-        case .english: detected = .english
-        case .spanish: detected = .spanish
-        case .french: detected = .french
-        case .german: detected = .german
-        case .italian: detected = .italian
-        case .portuguese: detected = .portuguese
-        case .russian: detected = .russian
-        case .japanese: detected = .japanese
-        case .korean: detected = .korean
-        case .arabic: detected = .arabic
-        case .simplifiedChinese: detected = .chineseSimplified
-        case .traditionalChinese: detected = .chineseTraditional
-        default: detected = nil
-        }
-
-        if let detected, detected != sourceLanguage {
-            sourceLanguage = detected
+        case .english: return .english
+        case .spanish: return .spanish
+        case .french: return .french
+        case .german: return .german
+        case .italian: return .italian
+        case .portuguese: return .portuguese
+        case .russian: return .russian
+        case .japanese: return .japanese
+        case .korean: return .korean
+        case .arabic: return .arabic
+        case .simplifiedChinese: return .chineseSimplified
+        case .traditionalChinese: return .chineseTraditional
+        default: return nil
         }
     }
 }
