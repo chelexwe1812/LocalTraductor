@@ -99,6 +99,24 @@ struct SettingsView: View {
                             .pickerStyle(.menu)
                             .fixedSize()
                         }
+
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Posición de la barra de herramientas")
+                                Text("Coloca los selectores de idioma y los botones de acción arriba o debajo del par entrada/salida.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Picker("", selection: $settings.toolbarPosition) {
+                                ForEach(ToolbarPosition.allCases) { pos in
+                                    Text(pos.displayName).tag(pos)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .fixedSize()
+                        }
                     }
 
                     Section("Atajos globales") {

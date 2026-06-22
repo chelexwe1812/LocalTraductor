@@ -43,6 +43,24 @@ extension TranslationTone {
     }
 }
 
+/// Posición de la barra de herramientas en la pantalla del traductor.
+/// `top` la coloca encima del input; `bottom` debajo del output.
+enum ToolbarPosition: String, CaseIterable, Identifiable {
+    case top
+    case bottom
+
+    var id: String { rawValue }
+
+    /// `LocalizedStringKey` para que `Text(...)` busque la traducción en el
+    /// catálogo en vez de tratar el valor como literal.
+    var displayName: LocalizedStringKey {
+        switch self {
+        case .top: return "Arriba"
+        case .bottom: return "Abajo"
+        }
+    }
+}
+
 /// Preferencia del usuario para el modo de color de la UI.
 enum ColorSchemePreference: String, CaseIterable, Identifiable {
     case system
@@ -139,6 +157,12 @@ final class AppSettings {
         didSet { UserDefaults.standard.set(translationTone.rawValue, forKey: Keys.translationTone) }
     }
 
+    /// Posición de la barra de herramientas: arriba o debajo del par
+    /// entrada/salida.
+    var toolbarPosition: ToolbarPosition {
+        didSet { UserDefaults.standard.set(toolbarPosition.rawValue, forKey: Keys.toolbarPosition) }
+    }
+
     private init() {
         let d = UserDefaults.standard
         // .bool(forKey:) devuelve false si no existe → defaults seguros.
@@ -179,6 +203,12 @@ final class AppSettings {
         } else {
             self.translationTone = .neutral
         }
+        if let raw = d.string(forKey: Keys.toolbarPosition),
+           let pos = ToolbarPosition(rawValue: raw) {
+            self.toolbarPosition = pos
+        } else {
+            self.toolbarPosition = .top
+        }
     }
 
     private enum Keys {
@@ -190,5 +220,6 @@ final class AppSettings {
         static let colorScheme = "colorScheme"
         static let appLanguage = "appLanguage"
         static let translationTone = "translationTone"
+        static let toolbarPosition = "toolbarPosition"
     }
 }

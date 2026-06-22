@@ -54,15 +54,23 @@ struct ContentView: View {
 
     // MARK: - Vista del traductor
     private var translatorView: some View {
-        // Tres bloques verticales (entrada / salida / barra de acciones)
-        // separados solo por un `Divider` del sistema. Nada de tarjetas,
-        // ambos cuadros de texto ocupan todo el ancho.
+        // Tres bloques verticales (entrada / salida + barra de acciones).
+        // La posición de la barra (arriba o abajo) la elige el usuario en
+        // Configuración. Sin tarjetas: ambos cuadros ocupan todo el ancho.
         VStack(spacing: 0) {
-            inputArea
-            Divider()
-            outputArea
-            Divider()
-            bottomBar
+            if settings.toolbarPosition == .top {
+                bottomBar
+                Divider()
+                inputArea
+                Divider()
+                outputArea
+            } else {
+                inputArea
+                Divider()
+                outputArea
+                Divider()
+                bottomBar
+            }
         }
         .overlay(alignment: .top) { statusOverlay }
     }
