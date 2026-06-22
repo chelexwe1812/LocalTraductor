@@ -19,14 +19,18 @@ struct ContentView: View {
         // Aplica la preferencia de modo de color del usuario. Pasa `nil` cuando
         // el usuario eligió "Sistema" para que SwiftUI siga la apariencia activa.
         .preferredColorScheme(settings.colorScheme.colorScheme)
+        // Fuerza el idioma de la interfaz para que `Text("…")` busque las
+        // traducciones en el catálogo aunque macOS esté en otro idioma.
+        .environment(\.locale, settings.appLanguage.locale)
         // `TextEditor` envuelve un `NSTextView` que cachea sus colores cuando
         // cambia la apariencia en caliente: el fondo se actualiza pero las
         // letras se quedan con el color anterior. Forzar la identidad de la
         // jerarquía al cambiar el tema obliga a SwiftUI a destruir y recrear
         // los NSTextView para que se reinicialicen con los colores correctos.
         // El coste (perder foco/scroll) es aceptable porque cambiar de tema
-        // es una acción rara.
-        .id(settings.colorScheme)
+        // es una acción rara. También re-identificamos al cambiar de idioma
+        // para forzar el re-render de las strings localizadas.
+        .id("\(settings.colorScheme.rawValue)-\(settings.appLanguage.rawValue)")
         .onChange(of: viewModel.isTranslating) { wasTranslating, isTranslating in
             // Auto-copy: copiamos solo cuando la traducción termina (no en
             // cada delta de streaming, que machacaría el portapapeles).
@@ -160,16 +164,18 @@ struct ContentView: View {
     private var statusOverlay: some View {
         switch viewModel.modelState {
         case .loading:
-            statusBanner(text: "Cargando modelo…", systemImage: "hourglass", color: .orange)
+            statusBanner("Cargando modelo…", systemImage: "hourglass", color: .orange)
         case .failed(let message):
-            statusBanner(text: "Error: \(message)", systemImage: "exclamationmark.triangle", color: .red)
+            // La interpolación produce una `LocalizedStringKey` con clave
+            // "Error: %@", que coincide con la entrada del catálogo.
+            statusBanner("Error: \(message)", systemImage: "exclamationmark.triangle", color: .red)
         case .idle, .ready:
             EmptyView()
         }
     }
 
-    private func statusBanner(text: String, systemImage: String, color: Color) -> some View {
-        Label(text, systemImage: systemImage)
+    private func statusBanner(_ key: LocalizedStringKey, systemImage: String, color: Color) -> some View {
+        Label(key, systemImage: systemImage)
             .font(.caption)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)

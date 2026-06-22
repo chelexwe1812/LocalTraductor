@@ -119,9 +119,16 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
 
     private func showContextMenu() {
         let menu = NSMenu()
+        // El menú de NSMenu vive fuera de SwiftUI: el `\.locale` del
+        // environment no se aplica aquí, así que traducimos manualmente
+        // con el locale del idioma elegido por el usuario.
+        let locale = AppSettings.shared.appLanguage.locale
 
         let configItem = NSMenuItem(
-            title: "Configuración…",
+            // Mismo key que el título de la pantalla; el "…" tras el texto
+            // lo añadimos manualmente para no duplicar entradas en el catálogo
+            // (que generaba colisión de símbolos auto-generados).
+            title: String(localized: "Configuración", locale: locale) + "…",
             action: #selector(openSettings),
             keyEquivalent: ","
         )
@@ -131,7 +138,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         menu.addItem(NSMenuItem.separator())
 
         let quitItem = NSMenuItem(
-            title: "Cerrar LocalTranslator",
+            title: String(localized: "Cerrar LocalTranslator", locale: locale),
             action: #selector(quitApp),
             keyEquivalent: "q"
         )

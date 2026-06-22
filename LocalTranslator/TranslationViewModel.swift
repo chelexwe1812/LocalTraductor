@@ -183,7 +183,13 @@ final class TranslationViewModel {
             if let detected = detectLanguage(for: textSnapshot) {
                 sourceLanguage = detected
             } else {
-                outputText = "⚠️ No se pudo detectar el idioma de origen."
+                // Prependemos el emoji a mano (no entra en el catálogo) para
+                // evitar colisiones de símbolos auto-generados con otras
+                // entradas que solo se diferenciaban por el prefijo.
+                outputText = "⚠️ " + String(
+                    localized: "No se pudo detectar el idioma de origen.",
+                    locale: settings.appLanguage.locale
+                )
                 return
             }
         }
@@ -218,7 +224,10 @@ final class TranslationViewModel {
             } catch is CancellationError {
                 // Traducción descartada por una nueva: no hacemos nada
             } catch {
-                self.outputText = "⚠️ Error: \(error.localizedDescription)"
+                self.outputText = "⚠️ " + String(
+                    localized: "Error: \(error.localizedDescription)",
+                    locale: self.settings.appLanguage.locale
+                )
             }
             self.isTranslating = false
         }

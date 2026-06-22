@@ -81,6 +81,24 @@ struct SettingsView: View {
                             .pickerStyle(.menu)
                             .fixedSize()
                         }
+
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Idioma de la app")
+                                Text("Idioma de la interfaz de LocalTranslator. No afecta a los idiomas de traducción.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Picker("", selection: $settings.appLanguage) {
+                                ForEach(AppLanguage.allCases) { lang in
+                                    Text(lang.displayName).tag(lang)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .fixedSize()
+                        }
                     }
 
                     Section("Atajos globales") {

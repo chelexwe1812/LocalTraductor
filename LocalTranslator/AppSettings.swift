@@ -3,6 +3,33 @@ import Observation
 import SwiftUI
 import AppKit
 
+/// Idioma de la interfaz de la app (independiente de los idiomas de
+/// traducción). Por ahora solo español e inglés.
+enum AppLanguage: String, CaseIterable, Identifiable {
+    case spanish
+    case english
+
+    var id: String { rawValue }
+
+    /// Nombre del idioma en su propia lengua, como es habitual en pickers
+    /// de idioma para que cada usuario lo reconozca.
+    var displayName: String {
+        switch self {
+        case .spanish: return "Español"
+        case .english: return "English"
+        }
+    }
+
+    /// `Locale` que aplicamos al entorno SwiftUI para que `Text("…")` busque
+    /// las traducciones del idioma elegido en `Localizable.xcstrings`.
+    var locale: Locale {
+        switch self {
+        case .spanish: return Locale(identifier: "es")
+        case .english: return Locale(identifier: "en")
+        }
+    }
+}
+
 /// Preferencia del usuario para el modo de color de la UI.
 enum ColorSchemePreference: String, CaseIterable, Identifiable {
     case system
@@ -11,7 +38,10 @@ enum ColorSchemePreference: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var displayName: String {
+    /// Devolvemos `LocalizedStringKey` (no `String`) para que `Text(...)`
+    /// realice la búsqueda en el catálogo de strings; con un `String` plano
+    /// SwiftUI lo trataría como texto literal y nunca lo traduciría.
+    var displayName: LocalizedStringKey {
         switch self {
         case .system: return "Sistema"
         case .light: return "Claro"
@@ -84,6 +114,12 @@ final class AppSettings {
         didSet { UserDefaults.standard.set(colorScheme.rawValue, forKey: Keys.colorScheme) }
     }
 
+    /// Idioma de la interfaz de la app (no confundir con los idiomas de
+    /// traducción origen/destino).
+    var appLanguage: AppLanguage {
+        didSet { UserDefaults.standard.set(appLanguage.rawValue, forKey: Keys.appLanguage) }
+    }
+
     private init() {
         let d = UserDefaults.standard
         // .bool(forKey:) devuelve false si no existe → defaults seguros.
@@ -112,6 +148,12 @@ final class AppSettings {
         } else {
             self.colorScheme = .system
         }
+        if let raw = d.string(forKey: Keys.appLanguage),
+           let lang = AppLanguage(rawValue: raw) {
+            self.appLanguage = lang
+        } else {
+            self.appLanguage = .spanish
+        }
     }
 
     private enum Keys {
@@ -121,5 +163,6 @@ final class AppSettings {
         static let clearOnDismiss = "clearOnDismiss"
         static let translateClipboardOnOpen = "translateClipboardOnOpen"
         static let colorScheme = "colorScheme"
+        static let appLanguage = "appLanguage"
     }
 }
