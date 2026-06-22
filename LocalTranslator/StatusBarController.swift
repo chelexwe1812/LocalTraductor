@@ -63,6 +63,12 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             name: NSApplication.didResignActiveNotification,
             object: nil
         )
+
+        // Aplicamos la preferencia de tema y nos suscribimos a cambios para
+        // que tanto la chrome del popover (flecha, marco) como su contenido
+        // SwiftUI sigan la elección del usuario incluso en caliente.
+        applyColorSchemeFromSettings()
+        observeColorScheme()
     }
 
     deinit {
@@ -155,6 +161,67 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     nonisolated func popoverDidClose(_ notification: Notification) {
         MainActor.assumeIsolated {
             onPopoverDidClose()
+        }
+    }
+
+    nonisolated func popoverDidShow(_ notification: Notification) {
+        MainActor.assumeIsolated {
+            tintPopoverFrame()
+        }
+    }
+
+    // MARK: - Tinte de la flecha / chrome del popover
+    /// Pinta la vista de marco del popover con la misma tinta blanca sutil
+    /// que el SwiftUI aplicaba al panel de entrada. Así la flecha que
+    /// conecta el popover con el icono del menubar se ve del mismo color
+    /// que la sección del input que tiene justo debajo.
+    ///
+    /// Acceder a `view.superview` de un NSPopover es una técnica frágil que
+    /// depende de la jerarquía interna de AppKit; si Apple cambia esa
+    /// jerarquía en una futura macOS, este tinte simplemente no se aplicará
+    /// (la app seguirá funcionando, solo perderá el detalle visual).
+    @MainActor
+    private func tintPopoverFrame() {
+        guard let frameView = popover.contentViewController?.view.superview else { return }
+        frameView.wantsLayer = true
+        frameView.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.06).cgColor
+    }
+
+    // MARK: - Apariencia (modo claro / oscuro / sistema)
+    @MainActor
+    private func applyColorSchemeFromSettings() {
+        let appearance: NSAppearance?
+        switch AppSettings.shared.colorScheme {
+        case .system:
+            // Resolvemos la apariencia del sistema en este instante y la
+            // aplicamos explícitamente. Si dejáramos `nil`, NSPopover seguiría
+            // al sistema pero SwiftUI no recibiría ninguna notificación de
+            // cambio, así que los textos cacheados (NSTextView dentro de
+            // `TextEditor`) se quedarían con los colores anteriores hasta
+            // cerrar y reabrir el popover.
+            let isDark = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            appearance = NSAppearance(named: isDark ? .darkAqua : .aqua)
+        case .light:
+            appearance = NSAppearance(named: .aqua)
+        case .dark:
+            appearance = NSAppearance(named: .darkAqua)
+        }
+        popover.appearance = appearance
+    }
+
+    /// Observa cambios en `AppSettings.shared.colorScheme` mediante el
+    /// framework `Observation`. Como `withObservationTracking` solo dispara
+    /// una vez, nos re-registramos tras cada cambio.
+    @MainActor
+    private func observeColorScheme() {
+        withObservationTracking {
+            _ = AppSettings.shared.colorScheme
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.applyColorSchemeFromSettings()
+                self.observeColorScheme()
+            }
         }
     }
 }

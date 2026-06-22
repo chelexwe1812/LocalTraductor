@@ -1,5 +1,42 @@
 import Foundation
 import Observation
+import SwiftUI
+import AppKit
+
+/// Preferencia del usuario para el modo de color de la UI.
+enum ColorSchemePreference: String, CaseIterable, Identifiable {
+    case system
+    case light
+    case dark
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .system: return "Sistema"
+        case .light: return "Claro"
+        case .dark: return "Oscuro"
+        }
+    }
+
+    /// Devuelve un `ColorScheme` concreto siempre.
+    ///
+    /// Para `.system` resolvemos la apariencia activa de macOS en el momento
+    /// de la consulta: si dejáramos `nil`, SwiftUI no tendría un valor al que
+    /// reaccionar y los textos que ya cachearon su color (p. ej. el NSTextView
+    /// que envuelve `TextEditor`) se quedarían con la apariencia anterior
+    /// hasta cerrar/reabrir el popover.
+    @MainActor
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system:
+            let matched = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua])
+            return matched == .darkAqua ? .dark : .light
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+}
 
 /// Preferencias persistentes de la app.
 ///
@@ -42,6 +79,11 @@ final class AppSettings {
         didSet { UserDefaults.standard.set(translateClipboardOnOpen, forKey: Keys.translateClipboardOnOpen) }
     }
 
+    /// Modo de color: sigue el sistema, fuerza claro o fuerza oscuro.
+    var colorScheme: ColorSchemePreference {
+        didSet { UserDefaults.standard.set(colorScheme.rawValue, forKey: Keys.colorScheme) }
+    }
+
     private init() {
         let d = UserDefaults.standard
         // .bool(forKey:) devuelve false si no existe → defaults seguros.
@@ -64,6 +106,12 @@ final class AppSettings {
         } else {
             self.translateClipboardOnOpen = d.bool(forKey: Keys.translateClipboardOnOpen)
         }
+        if let raw = d.string(forKey: Keys.colorScheme),
+           let pref = ColorSchemePreference(rawValue: raw) {
+            self.colorScheme = pref
+        } else {
+            self.colorScheme = .system
+        }
     }
 
     private enum Keys {
@@ -72,5 +120,6 @@ final class AppSettings {
         static let autoDetectLanguage = "autoDetectLanguage"
         static let clearOnDismiss = "clearOnDismiss"
         static let translateClipboardOnOpen = "translateClipboardOnOpen"
+        static let colorScheme = "colorScheme"
     }
 }

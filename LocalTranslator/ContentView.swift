@@ -16,6 +16,17 @@ struct ContentView: View {
             }
         }
         .frame(width: 460, height: 400)
+        // Aplica la preferencia de modo de color del usuario. Pasa `nil` cuando
+        // el usuario eligió "Sistema" para que SwiftUI siga la apariencia activa.
+        .preferredColorScheme(settings.colorScheme.colorScheme)
+        // `TextEditor` envuelve un `NSTextView` que cachea sus colores cuando
+        // cambia la apariencia en caliente: el fondo se actualiza pero las
+        // letras se quedan con el color anterior. Forzar la identidad de la
+        // jerarquía al cambiar el tema obliga a SwiftUI a destruir y recrear
+        // los NSTextView para que se reinicialicen con los colores correctos.
+        // El coste (perder foco/scroll) es aceptable porque cambiar de tema
+        // es una acción rara.
+        .id(settings.colorScheme)
         .onChange(of: viewModel.isTranslating) { wasTranslating, isTranslating in
             // Auto-copy: copiamos solo cuando la traducción termina (no en
             // cada delta de streaming, que machacaría el portapapeles).
@@ -30,53 +41,16 @@ struct ContentView: View {
 
     // MARK: - Vista del traductor
     private var translatorView: some View {
-        @Bindable var bindable = viewModel
-
-        return VStack(spacing: 16) {
-            // Zona de entrada
+        // Tres bloques verticales (entrada / salida / barra de acciones)
+        // separados solo por un `Divider` del sistema. Nada de tarjetas,
+        // ambos cuadros de texto ocupan todo el ancho.
+        VStack(spacing: 0) {
             inputArea
-
-            // Zona de salida
+            Divider()
             outputArea
-
-            // Barra inferior: pickers de idioma + swap (izquierda) | clear + settings (derecha)
-            HStack(spacing: 10) {
-                languagePicker(selection: $bindable.sourceLanguage, includeAutoDetect: true)
-
-                Button {
-                    viewModel.swapLanguages()
-                } label: {
-                    Image(systemName: "arrow.left.arrow.right")
-                        .font(.system(size: 14, weight: .semibold))
-                }
-                .buttonStyle(.borderless)
-                .help("Intercambiar idiomas")
-
-                languagePicker(selection: $bindable.targetLanguage, includeAutoDetect: false)
-
-                Spacer()
-
-                Button {
-                    viewModel.clearInput()
-                } label: {
-                    Image(systemName: "eraser")
-                        .font(.system(size: 16, weight: .semibold))
-                }
-                .buttonStyle(.borderless)
-                .disabled(viewModel.inputText.isEmpty && viewModel.outputText.isEmpty)
-                .help("Limpiar entrada y traducción")
-
-                Button {
-                    viewModel.screen = .settings
-                } label: {
-                    Image(systemName: "gear")
-                        .font(.system(size: 16, weight: .semibold))
-                }
-                .buttonStyle(.borderless)
-                .help("Configuración")
-            }
+            Divider()
+            bottomBar
         }
-        .padding(20)
         .overlay(alignment: .top) { statusOverlay }
     }
 
@@ -86,44 +60,44 @@ struct ContentView: View {
         // Necesitamos `@Bindable` local porque `viewModel` viene del environment.
         @Bindable var bindable = viewModel
 
-        VStack(alignment: .trailing, spacing: 6) {
-            Text("Enter para traducir · Shift+Enter para nueva línea")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-
-            TextEditor(text: $bindable.inputText)
-                .font(.body)
-                .frame(height: 120)
-                .scrollContentBackground(.hidden)
-                .padding(8)
-                .background(Color(nsColor: .textBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(.quaternary, lineWidth: 1)
-                )
-                .onKeyPress(.return) {
-                    // Shift+Enter inserta nueva línea; Enter solo dispara traducción.
-                    if NSEvent.modifierFlags.contains(.shift) {
-                        return .ignored
-                    }
-                    viewModel.translate()
-                    return .handled
+        TextEditor(text: $bindable.inputText)
+            .font(.body)
+            .scrollContentBackground(.hidden)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Sin background aquí: el tinte del input se aplica a nivel
+            // popover en `StatusBarController` para que la flecha que apunta
+            // al icono del menubar comparta color con esta sección.
+            .onKeyPress(.return) {
+                // Shift+Enter inserta nueva línea; Enter solo dispara traducción.
+                if NSEvent.modifierFlags.contains(.shift) {
+                    return .ignored
                 }
-        }
+                viewModel.translate()
+                return .handled
+            }
     }
 
     // MARK: - Salida
     private var outputArea: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
+        ScrollView {
+            Text(viewModel.outputText.isEmpty ? " " : viewModel.outputText)
+                .font(.body)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .textSelection(.enabled)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Progress + copia como overlay en la esquina superior derecha,
+        // así no roban espacio vertical al texto traducido.
+        .overlay(alignment: .topTrailing) {
+            HStack(spacing: 8) {
                 if viewModel.isTranslating {
                     ProgressView()
                         .controlSize(.small)
                 }
-
-                Spacer()
-
                 if !viewModel.outputText.isEmpty {
                     Button {
                         copyToClipboard(viewModel.outputText)
@@ -134,25 +108,51 @@ struct ContentView: View {
                     .help("Copiar traducción")
                 }
             }
-            .frame(minHeight: 16)
-
-            ScrollView {
-                Text(viewModel.outputText.isEmpty ? " " : viewModel.outputText)
-                    .font(.body)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
-            }
-            // Altura fija idéntica a la del input para que ambos cuadros
-            // sean visualmente del mismo tamaño.
-            .frame(height: 120)
             .padding(8)
-            .background(Color(nsColor: .textBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(.quaternary, lineWidth: 1)
-            )
         }
+    }
+
+    // MARK: - Barra inferior (pickers + acciones)
+    private var bottomBar: some View {
+        @Bindable var bindable = viewModel
+
+        return HStack(spacing: 10) {
+            languagePicker(selection: $bindable.sourceLanguage, includeAutoDetect: true)
+
+            Button {
+                viewModel.swapLanguages()
+            } label: {
+                Image(systemName: "arrow.left.arrow.right")
+                    .font(.system(size: 14, weight: .semibold))
+            }
+            .buttonStyle(.borderless)
+            .help("Intercambiar idiomas")
+
+            languagePicker(selection: $bindable.targetLanguage, includeAutoDetect: false)
+
+            Spacer()
+
+            Button {
+                viewModel.clearInput()
+            } label: {
+                Image(systemName: "eraser")
+                    .font(.system(size: 16, weight: .semibold))
+            }
+            .buttonStyle(.borderless)
+            .disabled(viewModel.inputText.isEmpty && viewModel.outputText.isEmpty)
+            .help("Limpiar entrada y traducción")
+
+            Button {
+                viewModel.screen = .settings
+            } label: {
+                Image(systemName: "gear")
+                    .font(.system(size: 16, weight: .semibold))
+            }
+            .buttonStyle(.borderless)
+            .help("Configuración")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
     }
 
     // MARK: - Estado del modelo (banner superior)

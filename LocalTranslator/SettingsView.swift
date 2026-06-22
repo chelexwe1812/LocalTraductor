@@ -63,6 +63,26 @@ struct SettingsView: View {
                         }
                     }
 
+                    Section("Apariencia") {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Modo de color")
+                                Text("Cambia entre tema claro y oscuro. \"Sistema\" sigue la preferencia de macOS.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Picker("", selection: $settings.colorScheme) {
+                                ForEach(ColorSchemePreference.allCases) { pref in
+                                    Text(pref.displayName).tag(pref)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .fixedSize()
+                        }
+                    }
+
                     Section("Atajos globales") {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
