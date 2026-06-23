@@ -1,5 +1,103 @@
 import Foundation
 import Observation
+import SwiftUI
+import AppKit
+
+/// Idioma de la interfaz de la app (independiente de los idiomas de
+/// traducción). Por ahora solo español e inglés.
+enum AppLanguage: String, CaseIterable, Identifiable {
+    case spanish
+    case english
+
+    var id: String { rawValue }
+
+    /// Nombre del idioma en su propia lengua, como es habitual en pickers
+    /// de idioma para que cada usuario lo reconozca.
+    var displayName: String {
+        switch self {
+        case .spanish: return "Español"
+        case .english: return "English"
+        }
+    }
+
+    /// `Locale` que aplicamos al entorno SwiftUI para que `Text("…")` busque
+    /// las traducciones del idioma elegido en `Localizable.xcstrings`.
+    var locale: Locale {
+        switch self {
+        case .spanish: return Locale(identifier: "es")
+        case .english: return Locale(identifier: "en")
+        }
+    }
+}
+
+/// Nombre legible del tono para mostrar en el menú. Vive aquí (capa SwiftUI)
+/// para mantener `TranslationTone` libre de dependencias de UI.
+extension TranslationTone {
+    var displayName: LocalizedStringKey {
+        switch self {
+        case .neutral: return "Neutro"
+        case .formal: return "Formal"
+        case .casual: return "Casual"
+        case .technical: return "Técnico"
+        }
+    }
+}
+
+/// Posición de la barra de herramientas en la pantalla del traductor.
+/// `top` la coloca encima del input; `bottom` debajo del output.
+enum ToolbarPosition: String, CaseIterable, Identifiable {
+    case top
+    case bottom
+
+    var id: String { rawValue }
+
+    /// `LocalizedStringKey` para que `Text(...)` busque la traducción en el
+    /// catálogo en vez de tratar el valor como literal.
+    var displayName: LocalizedStringKey {
+        switch self {
+        case .top: return "Arriba"
+        case .bottom: return "Abajo"
+        }
+    }
+}
+
+/// Preferencia del usuario para el modo de color de la UI.
+enum ColorSchemePreference: String, CaseIterable, Identifiable {
+    case system
+    case light
+    case dark
+
+    var id: String { rawValue }
+
+    /// Devolvemos `LocalizedStringKey` (no `String`) para que `Text(...)`
+    /// realice la búsqueda en el catálogo de strings; con un `String` plano
+    /// SwiftUI lo trataría como texto literal y nunca lo traduciría.
+    var displayName: LocalizedStringKey {
+        switch self {
+        case .system: return "Sistema"
+        case .light: return "Claro"
+        case .dark: return "Oscuro"
+        }
+    }
+
+    /// Devuelve un `ColorScheme` concreto siempre.
+    ///
+    /// Para `.system` resolvemos la apariencia activa de macOS en el momento
+    /// de la consulta: si dejáramos `nil`, SwiftUI no tendría un valor al que
+    /// reaccionar y los textos que ya cachearon su color (p. ej. el NSTextView
+    /// que envuelve `TextEditor`) se quedarían con la apariencia anterior
+    /// hasta cerrar/reabrir el popover.
+    @MainActor
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system:
+            let matched = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua])
+            return matched == .darkAqua ? .dark : .light
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+}
 
 /// Preferencias persistentes de la app.
 ///
@@ -42,6 +140,29 @@ final class AppSettings {
         didSet { UserDefaults.standard.set(translateClipboardOnOpen, forKey: Keys.translateClipboardOnOpen) }
     }
 
+    /// Modo de color: sigue el sistema, fuerza claro o fuerza oscuro.
+    var colorScheme: ColorSchemePreference {
+        didSet { UserDefaults.standard.set(colorScheme.rawValue, forKey: Keys.colorScheme) }
+    }
+
+    /// Idioma de la interfaz de la app (no confundir con los idiomas de
+    /// traducción origen/destino).
+    var appLanguage: AppLanguage {
+        didSet { UserDefaults.standard.set(appLanguage.rawValue, forKey: Keys.appLanguage) }
+    }
+
+    /// Tono / registro con el que el modelo debe devolver la traducción.
+    /// El `TranslationViewModel` lee este valor en cada llamada al motor.
+    var translationTone: TranslationTone {
+        didSet { UserDefaults.standard.set(translationTone.rawValue, forKey: Keys.translationTone) }
+    }
+
+    /// Posición de la barra de herramientas: arriba o debajo del par
+    /// entrada/salida.
+    var toolbarPosition: ToolbarPosition {
+        didSet { UserDefaults.standard.set(toolbarPosition.rawValue, forKey: Keys.toolbarPosition) }
+    }
+
     private init() {
         let d = UserDefaults.standard
         // .bool(forKey:) devuelve false si no existe → defaults seguros.
@@ -64,6 +185,30 @@ final class AppSettings {
         } else {
             self.translateClipboardOnOpen = d.bool(forKey: Keys.translateClipboardOnOpen)
         }
+        if let raw = d.string(forKey: Keys.colorScheme),
+           let pref = ColorSchemePreference(rawValue: raw) {
+            self.colorScheme = pref
+        } else {
+            self.colorScheme = .system
+        }
+        if let raw = d.string(forKey: Keys.appLanguage),
+           let lang = AppLanguage(rawValue: raw) {
+            self.appLanguage = lang
+        } else {
+            self.appLanguage = .spanish
+        }
+        if let raw = d.string(forKey: Keys.translationTone),
+           let tone = TranslationTone(rawValue: raw) {
+            self.translationTone = tone
+        } else {
+            self.translationTone = .neutral
+        }
+        if let raw = d.string(forKey: Keys.toolbarPosition),
+           let pos = ToolbarPosition(rawValue: raw) {
+            self.toolbarPosition = pos
+        } else {
+            self.toolbarPosition = .top
+        }
     }
 
     private enum Keys {
@@ -72,5 +217,9 @@ final class AppSettings {
         static let autoDetectLanguage = "autoDetectLanguage"
         static let clearOnDismiss = "clearOnDismiss"
         static let translateClipboardOnOpen = "translateClipboardOnOpen"
+        static let colorScheme = "colorScheme"
+        static let appLanguage = "appLanguage"
+        static let translationTone = "translationTone"
+        static let toolbarPosition = "toolbarPosition"
     }
 }
