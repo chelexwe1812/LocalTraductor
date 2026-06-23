@@ -25,6 +25,7 @@ struct LocalTranslatorApp: App {
             }
             .padding(32)
             .frame(width: 360)
+            .environment(\.locale, AppSettings.shared.appLanguage.locale)
         }
     }
 }

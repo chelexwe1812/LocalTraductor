@@ -1,6 +1,9 @@
 import Foundation
 
 enum Language: String, CaseIterable, Identifiable {
+    /// Detección automática del idioma de entrada. Solo válido como
+    /// `sourceLanguage`: la UI lo filtra del picker de destino.
+    case autoDetect = "auto"
     case english = "en"
     case spanish = "es"
     case french = "fr"
@@ -19,6 +22,7 @@ enum Language: String, CaseIterable, Identifiable {
     /// Nombre legible para mostrar en la UI (en su propio idioma).
     var displayName: String {
         switch self {
+        case .autoDetect: return "Auto Detect"
         case .english: return "English"
         case .spanish: return "Español"
         case .french: return "Français"
@@ -38,6 +42,7 @@ enum Language: String, CaseIterable, Identifiable {
     /// hacia el modelo, que recibe sus instrucciones en inglés).
     var englishName: String {
         switch self {
+        case .autoDetect: return "Auto Detect"
         case .english: return "English"
         case .spanish: return "Spanish"
         case .french: return "French"
@@ -63,8 +68,11 @@ enum Language: String, CaseIterable, Identifiable {
 
     /// Identificador BCP-47 con región, para que `AVSpeechSynthesisVoice`
     /// elija la voz adecuada al reproducir el texto.
+    /// `.autoDetect` no es un idioma real: devuelve `en-US` como fallback
+    /// inocuo (no se debe usar para sintetizar voz directamente).
     var speechLocale: String {
         switch self {
+        case .autoDetect: return "en-US"
         case .english: return "en-US"
         case .spanish: return "es-ES"
         case .french: return "fr-FR"

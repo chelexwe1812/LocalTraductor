@@ -12,14 +12,15 @@ actor MockEngine: TranslationEngine {
 
     func translate(_ text: String,
                    from source: Language,
-                   to target: Language) async throws -> AsyncThrowingStream<String, Error> {
+                   to target: Language,
+                   tone: TranslationTone) async throws -> AsyncThrowingStream<String, Error> {
 
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             return AsyncThrowingStream { $0.finish() }
         }
 
-        let translated = "[\(source.rawValue)→\(target.rawValue)] \(text)"
+        let translated = "[\(source.rawValue)→\(target.rawValue)|\(tone.rawValue)] \(text)"
         // Trocea por palabras para imitar el goteo de tokens del modelo real.
         let words = translated.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
 

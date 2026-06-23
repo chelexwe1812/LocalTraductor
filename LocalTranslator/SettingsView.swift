@@ -63,6 +63,62 @@ struct SettingsView: View {
                         }
                     }
 
+                    Section("Apariencia") {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Modo de color")
+                                Text("Cambia entre tema claro y oscuro. \"Sistema\" sigue la preferencia de macOS.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Picker("", selection: $settings.colorScheme) {
+                                ForEach(ColorSchemePreference.allCases) { pref in
+                                    Text(pref.displayName).tag(pref)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .fixedSize()
+                        }
+
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Idioma de la app")
+                                Text("Idioma de la interfaz de LocalTranslator. No afecta a los idiomas de traducción.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Picker("", selection: $settings.appLanguage) {
+                                ForEach(AppLanguage.allCases) { lang in
+                                    Text(lang.displayName).tag(lang)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .fixedSize()
+                        }
+
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Posición de la barra de herramientas")
+                                Text("Coloca los selectores de idioma y los botones de acción arriba o debajo del par entrada/salida.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Picker("", selection: $settings.toolbarPosition) {
+                                ForEach(ToolbarPosition.allCases) { pos in
+                                    Text(pos.displayName).tag(pos)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .fixedSize()
+                        }
+                    }
+
                     Section("Atajos globales") {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
