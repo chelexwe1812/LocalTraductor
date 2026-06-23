@@ -6,6 +6,10 @@ struct ContentView: View {
     @Environment(TranslationViewModel.self) private var viewModel
     private let settings = AppSettings.shared
 
+    /// ID estable del ancla al final del scroll de salida. Lo usa
+    /// `ScrollViewReader` para hacer auto-scroll mientras llega el stream.
+    private let outputBottomID = "outputBottom"
+
     var body: some View {
         Group {
             switch viewModel.screen {
@@ -102,13 +106,30 @@ struct ContentView: View {
 
     // MARK: - Salida
     private var outputArea: some View {
-        ScrollView {
-            Text(viewModel.outputText.isEmpty ? " " : viewModel.outputText)
-                .font(.body)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .textSelection(.enabled)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
+        // `ScrollViewReader` para poder hacer auto-scroll al final mientras
+        // van llegando los chunks de streaming en traducciones largas.
+        ScrollViewReader { proxy in
+            ScrollView {
+                Text(viewModel.outputText.isEmpty ? " " : viewModel.outputText)
+                    .font(.body)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                // Ancla invisible al final del contenido: `scrollTo` la
+                // posiciona al borde inferior del viewport, dejando el
+                // último trozo de texto siempre visible.
+                Color.clear
+                    .frame(height: 1)
+                    .id(outputBottomID)
+            }
+            .onChange(of: viewModel.outputText) { _, _ in
+                // Animación corta para que el desplazamiento siga al texto
+                // sin parecer brusco con cada chunk del stream.
+                withAnimation(.linear(duration: 0.1)) {
+                    proxy.scrollTo(outputBottomID, anchor: .bottom)
+                }
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // Borde arcoíris estilo Siri: aparece cuando arranca una traducción
@@ -160,7 +181,7 @@ struct ContentView: View {
                 viewModel.swapLanguages()
             } label: {
                 Image(systemName: "arrow.left.arrow.right")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
             }
             .buttonStyle(.borderless)
             .help("Intercambiar idiomas")
@@ -178,7 +199,7 @@ struct ContentView: View {
                 viewModel.clearInput()
             } label: {
                 Image(systemName: "eraser")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
             }
             .buttonStyle(.borderless)
             .disabled(viewModel.inputText.isEmpty && viewModel.outputText.isEmpty)
@@ -188,7 +209,7 @@ struct ContentView: View {
                 viewModel.screen = .settings
             } label: {
                 Image(systemName: "gear")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
             }
             .buttonStyle(.borderless)
             .help("Configuración")
@@ -305,79 +326,96 @@ struct ContentView: View {
     }
 }
 
-/// Borde arcoíris estilo Siri que envuelve el área de salida mientras dura
-/// una traducción. Usa `hueRotation` porque `AngularGradient` no expone su
-/// ángulo como propiedad animable; rotar el matiz produce el mismo efecto
-/// "arcoíris en movimiento" sin recrear el gradiente cada frame.
+/// Borde estilo Siri que envuelve el área de salida mientras dura una
+/// traducción. Diseño:
+/// - `TimelineView(.animation)` redibuja cada frame con un `AngularGradient`
+///   cuyo `angle` depende del tiempo. Así el gradiente *rota* en su sitio en
+///   vez de cambiar de matiz, lo que evita pasar por verdes (problema típico
+///   de `hueRotation`, que cicla por TODO el espectro).
+/// - Dos `strokeBorder` superpuestos: el exterior es ancho y muy difuminado
+///   (halo) y el interior es más fino y un poco menos difuminado (perfil).
+///   Esa combinación da el aspecto luminoso/dramático tipo Siri.
+/// - La paleta es la "siri-ish" pedida: rosas, rojos, amarillo, blanco,
+///   celestes y morados. Sin mint / verde.
 ///
-/// Nota crítica: el bucle no puede consultar `isTranslating` (un `let` del
-/// struct) dentro del `completion:` del `withAnimation`, porque ese closure
-/// captura `self` por valor y deja el flag congelado al instante en que
-/// arrancó la vuelta — eso provocaba que el efecto siguiera para siempre.
-/// La solución es espejar el flag en un `@State` (`loopActive`), que sí
-/// vive en storage externo y devuelve el valor actual aunque se lea desde
-/// un `self` capturado.
+/// La animación se monta solo mientras `rendered == true`, así no malgasta
+/// CPU cuando no está traduciendo.
 private struct SiriGlow: View {
     let isTranslating: Bool
 
-    @State private var hue: Double = 0
+    /// Mantiene el `TimelineView` montado durante el fade-in y fade-out.
+    /// Se pone a `false` al terminar el fade-out (vía `completion:`).
+    @State private var rendered: Bool = false
     @State private var opacity: Double = 0
-    /// Espejo de `isTranslating` accesible desde closures asíncronos.
-    @State private var loopActive: Bool = false
-    /// Invalida bucles previos si la traducción reinicia antes de que la
-    /// vuelta en curso termine su animación lineal.
+    @State private var startDate: Date = .distantPast
+    /// Invalida `completion:` de animaciones previas si la traducción
+    /// reinicia mientras se estaba desvaneciendo el efecto.
     @State private var generation: Int = 0
 
+    /// Velocidad de giro del gradiente, en grados por segundo.
+    private let rotationSpeed: Double = 220
+
+    /// Paleta Siri: rosas, rojos, amarillo cálido, blanco, celestes,
+    /// morados. Nada de mint. Termina en el mismo morado para que la
+    /// transición al envolver sea suave.
+    private let siriColors: [Color] = [
+        .purple, .pink, .red, .yellow, .white, .cyan, .blue, .indigo, .purple
+    ]
+
     var body: some View {
-        Rectangle()
-            .strokeBorder(
-                AngularGradient(
-                    colors: [.purple, .pink, .blue, .cyan, .mint, .purple],
-                    center: .center
-                ),
-                lineWidth: 3
-            )
-            .blur(radius: 5)
-            .hueRotation(.degrees(hue))
-            .opacity(opacity)
-            .allowsHitTesting(false)
-            .onChange(of: isTranslating) { _, newValue in
-                if newValue {
-                    start()
-                } else {
-                    // Marcamos el final del bucle; la vuelta lineal en curso
-                    // termina su giro y al llegar al `completion:` ve
-                    // `loopActive = false` y desvanece la opacidad.
-                    loopActive = false
+        ZStack {
+            if rendered {
+                TimelineView(.animation) { timeline in
+                    let angle = timeline.date.timeIntervalSince(startDate) * rotationSpeed
+                    let gradient = AngularGradient(
+                        colors: siriColors,
+                        center: .center,
+                        angle: .degrees(angle)
+                    )
+                    ZStack {
+                        // Halo exterior: ancho y muy difuminado.
+                        Rectangle()
+                            .strokeBorder(gradient, lineWidth: 10)
+                            .blur(radius: 12)
+                            .opacity(0.45)
+                        // Perfil interior: más fino, define el borde.
+                        Rectangle()
+                            .strokeBorder(gradient, lineWidth: 4)
+                            .blur(radius: 3)
+                    }
                 }
             }
+        }
+        .opacity(opacity)
+        .allowsHitTesting(false)
+        .onChange(of: isTranslating) { _, newValue in
+            if newValue {
+                start()
+            } else {
+                stop()
+            }
+        }
     }
 
     private func start() {
         generation &+= 1
-        let myGen = generation
-        loopActive = true
-        hue = 0
-        withAnimation(.easeOut(duration: 0.18)) {
-            opacity = 0.9
+        rendered = true
+        startDate = Date()
+        withAnimation(.easeOut(duration: 0.25)) {
+            opacity = 1.0
         }
-        rotate(gen: myGen)
     }
 
-    /// Una vuelta de 360° del matiz. Al completarse, decide si sigue dando
-    /// vueltas (traducción aún en curso) o si se desvanece (terminó).
-    private func rotate(gen: Int) {
-        guard gen == generation else { return }
-        withAnimation(.linear(duration: 1.4)) {
-            hue += 360
+    private func stop() {
+        generation &+= 1
+        let myGen = generation
+        withAnimation(.easeIn(duration: 0.55)) {
+            opacity = 0
         } completion: {
-            guard gen == generation else { return }
-            if loopActive {
-                rotate(gen: gen)
-            } else {
-                withAnimation(.easeIn(duration: 0.5)) {
-                    opacity = 0
-                }
+            // Si la traducción volvió a arrancar antes de terminar el
+            // fade-out, no desmontamos: una nueva start() ya está activa.
+            if myGen == generation {
+                rendered = false
             }
         }
     }

@@ -68,12 +68,19 @@ actor MLXEngine: TranslationEngine {
         )
 
         // 3) Instrucciones de sistema: fuerzan al modelo a devolver
-        //    SOLO la traducción, sin comentarios ni comillas.
+        //    SOLO la traducción, sin comentarios ni comillas, y a respetar
+        //    los placeholders `⟦Cn⟧` que la app inyecta para proteger
+        //    código y URLs (ver `MarkdownCodePreserver`).
         let systemInstructions = """
         You are a precise translator between English and Spanish. \
         Output ONLY the translated text — no quotes, no explanations, \
         no preamble, no language labels. Preserve the meaning, tone, \
-        punctuation and paragraph breaks of the original.
+        punctuation and paragraph breaks of the original. \
+        Preserve markdown structure (headings, lists, bold, italic, links) \
+        verbatim — translate only the natural-language content inside. \
+        If you see placeholder tokens of the form ⟦C0⟧, ⟦C1⟧, ⟦C2⟧… \
+        copy them EXACTLY as-is into the output — do not translate, \
+        rename, reorder, expand or remove them.
         """
 
         self.session = ChatSession(

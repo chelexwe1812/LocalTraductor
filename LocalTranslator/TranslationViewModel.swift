@@ -204,12 +204,18 @@ final class TranslationViewModel {
         // Limpiamos para que los deltas vayan apareciendo sobre lienzo en blanco.
         outputText = ""
 
+        // Preservación de código/markdown: extraemos bloques fenced, código
+        // inline y URLs, los sustituimos por placeholders `⟦C0⟧` y se los
+        // pasamos al modelo. Conforme llegan los chunks restauramos los
+        // placeholders al vuelo para que el usuario vea el código original.
+        let (sanitized, preservedBlocks) = MarkdownCodePreserver.extract(textSnapshot)
+
         let toneSnapshot = settings.translationTone
         translationTask = Task { [weak self] in
             guard let self else { return }
             do {
                 let stream = try await self.engine.translate(
-                    textSnapshot,
+                    sanitized,
                     from: self.sourceLanguage,
                     to: self.targetLanguage,
                     tone: toneSnapshot
@@ -218,11 +224,15 @@ final class TranslationViewModel {
                 for try await chunk in stream {
                     try Task.checkCancellation()
                     buffer += chunk
-                    // Mostramos el buffer crudo en streaming; al terminar limpiamos.
-                    self.outputText = buffer
+                    // Restauramos placeholders dentro del buffer parcial para
+                    // que el código aparezca tal cual mientras se streamea.
+                    self.outputText = MarkdownCodePreserver.restore(buffer, with: preservedBlocks)
                 }
                 try Task.checkCancellation()
-                self.outputText = buffer.trimmingCharacters(in: .whitespacesAndNewlines)
+                let final = MarkdownCodePreserver
+                    .restore(buffer, with: preservedBlocks)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                self.outputText = final
             } catch is CancellationError {
                 // Traducción descartada por una nueva: no hacemos nada
             } catch {
@@ -291,5 +301,73 @@ final class TranslationViewModel {
         case .traditionalChinese: return .chineseTraditional
         default: return nil
         }
+    }
+}
+
+/// Sustituye en el texto las partes "no-traducibles" (bloques de código,
+/// código inline y URLs) por placeholders `⟦C0⟧`, `⟦C1⟧`… para que el
+/// modelo solo traduzca el lenguaje natural. Tras la traducción, los
+/// placeholders se restauran con su contenido original intacto.
+///
+/// Los brackets `⟦` (U+27E6) y `⟧` (U+27E7) se eligen porque casi no
+/// aparecen en texto natural y los modelos de chat tienden a reproducirlos
+/// literalmente — además el system prompt ya pide explícitamente que se
+/// preserven sin tocar.
+enum MarkdownCodePreserver {
+
+    /// Orden importa: el patrón fenced ``` matchea antes que el inline `
+    /// para que ``` ... ``` no se rompa en tres ` sueltos.
+    private static let patterns: [String] = [
+        #"```[\s\S]*?```"#,      // bloques de código fenced (multi-línea)
+        #"`[^`\n]+?`"#,          // código inline
+        #"https?://[^\s)\]]+"#   // URLs (tutoriales suelen tenerlas)
+    ]
+
+    /// Devuelve el texto saneado con placeholders + la lista de fragmentos
+    /// originales, en el orden en que se asignaron los índices.
+    static func extract(_ text: String) -> (sanitized: String, blocks: [String]) {
+        var sanitized = text
+        var blocks: [String] = []
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            sanitized = replaceMatches(in: sanitized, regex: regex) { matched in
+                blocks.append(matched)
+                return "⟦C\(blocks.count - 1)⟧"
+            }
+        }
+        return (sanitized, blocks)
+    }
+
+    /// Reemplaza `⟦C0⟧`, `⟦C1⟧`… por el contenido original. Idempotente y
+    /// tolerante a placeholders parciales: si el stream aún no completó
+    /// el patrón, se queda como está hasta que llegue el carácter de cierre.
+    static func restore(_ text: String, with blocks: [String]) -> String {
+        guard !blocks.isEmpty else { return text }
+        var result = text
+        for (i, block) in blocks.enumerated() {
+            result = result.replacingOccurrences(of: "⟦C\(i)⟧", with: block)
+        }
+        return result
+    }
+
+    private static func replaceMatches(
+        in text: String,
+        regex: NSRegularExpression,
+        replacement: (String) -> String
+    ) -> String {
+        let nsRange = NSRange(text.startIndex..., in: text)
+        let matches = regex.matches(in: text, range: nsRange)
+        guard !matches.isEmpty else { return text }
+
+        var result = ""
+        var lastIdx = text.startIndex
+        for m in matches {
+            guard let range = Range(m.range, in: text) else { continue }
+            result += text[lastIdx..<range.lowerBound]
+            result += replacement(String(text[range]))
+            lastIdx = range.upperBound
+        }
+        result += text[lastIdx...]
+        return result
     }
 }
