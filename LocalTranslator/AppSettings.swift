@@ -163,6 +163,13 @@ final class AppSettings {
         didSet { UserDefaults.standard.set(toolbarPosition.rawValue, forKey: Keys.toolbarPosition) }
     }
 
+    /// `true` cuando el usuario ya pasó por la pantalla de bienvenida.
+    /// Por defecto `false`: la primera vez que arranca la app se muestra
+    /// el onboarding en lugar del traductor.
+    var hasCompletedOnboarding: Bool {
+        didSet { UserDefaults.standard.set(hasCompletedOnboarding, forKey: Keys.hasCompletedOnboarding) }
+    }
+
     private init() {
         let d = UserDefaults.standard
         // .bool(forKey:) devuelve false si no existe → defaults seguros.
@@ -209,6 +216,9 @@ final class AppSettings {
         } else {
             self.toolbarPosition = .top
         }
+        // `bool(forKey:)` devuelve `false` si la clave no existe → primer
+        // arranque muestra el onboarding automáticamente.
+        self.hasCompletedOnboarding = d.bool(forKey: Keys.hasCompletedOnboarding)
     }
 
     private enum Keys {
@@ -221,5 +231,6 @@ final class AppSettings {
         static let appLanguage = "appLanguage"
         static let translationTone = "translationTone"
         static let toolbarPosition = "toolbarPosition"
+        static let hasCompletedOnboarding = "hasCompletedOnboarding"
     }
 }

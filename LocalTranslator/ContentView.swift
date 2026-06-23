@@ -12,11 +12,18 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            switch viewModel.screen {
-            case .translator:
-                translatorView
-            case .settings:
-                SettingsView(onBack: { viewModel.screen = .translator })
+            if !settings.hasCompletedOnboarding {
+                // Primer arranque: el onboarding tiene prioridad sobre
+                // cualquier pantalla. Marcar el flag cierra el onboarding
+                // y muestra el traductor automáticamente (es @Observable).
+                OnboardingView(onFinish: { settings.hasCompletedOnboarding = true })
+            } else {
+                switch viewModel.screen {
+                case .translator:
+                    translatorView
+                case .settings:
+                    SettingsView(onBack: { viewModel.screen = .translator })
+                }
             }
         }
         .frame(width: 460, height: 400)
