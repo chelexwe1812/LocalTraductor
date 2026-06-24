@@ -65,26 +65,4 @@ enum Language: String, CaseIterable, Identifiable {
     var displayLabel: String {
         englishName == displayName ? englishName : "\(englishName) (\(displayName))"
     }
-
-    /// Identificador BCP-47 con región, para que `AVSpeechSynthesisVoice`
-    /// elija la voz adecuada al reproducir el texto.
-    /// `.autoDetect` no es un idioma real: devuelve `en-US` como fallback
-    /// inocuo (no se debe usar para sintetizar voz directamente).
-    var speechLocale: String {
-        switch self {
-        case .autoDetect: return "en-US"
-        case .english: return "en-US"
-        case .spanish: return "es-ES"
-        case .french: return "fr-FR"
-        case .german: return "de-DE"
-        case .italian: return "it-IT"
-        case .portuguese: return "pt-PT"
-        case .russian: return "ru-RU"
-        case .japanese: return "ja-JP"
-        case .korean: return "ko-KR"
-        case .arabic: return "ar-SA"
-        case .chineseSimplified: return "zh-CN"
-        case .chineseTraditional: return "zh-TW"
-        }
-    }
 }

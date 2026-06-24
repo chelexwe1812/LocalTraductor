@@ -2,7 +2,6 @@ import Foundation
 import Observation
 import NaturalLanguage
 import AppKit
-import AVFoundation
 
 @MainActor
 @Observable
@@ -59,8 +58,6 @@ final class TranslationViewModel {
     /// bienvenida para pintar la barra. Se mantiene en 0 cuando no estamos
     /// descargando.
     var downloadProgress: Double = 0
-    /// `true` mientras dura la fase de descarga del modelo (primera carga).
-    var isDownloadingModel: Bool = false
 
     /// Bandera momentánea que dispara un halo Siri rodeando toda la ventana
     /// del traductor justo cuando se abre por primera vez después de la
@@ -84,9 +81,6 @@ final class TranslationViewModel {
     /// para que el auto-pegado al abrir no repita el mismo texto cada vez.
     private var lastSeenClipboard: String?
 
-    /// Síntesis de voz para el botón 🔊 — lee la traducción en alto.
-    private let speechSynthesizer = AVSpeechSynthesizer()
-
     // MARK: - Init
     /// Recibe el motor de traducción y la fuente de preferencias.
     init(engine: TranslationEngine, settings: AppSettings = .shared) {
@@ -97,7 +91,6 @@ final class TranslationViewModel {
     // MARK: - Carga del modelo
     func loadModel() async {
         modelState = .loading
-        isDownloadingModel = true
         downloadProgress = 0
         do {
             try await engine.loadModel { [weak self] progress in
@@ -109,7 +102,6 @@ final class TranslationViewModel {
         } catch {
             modelState = .failed(error.localizedDescription)
         }
-        isDownloadingModel = false
     }
 
     // MARK: - Limpiar la entrada y la salida
@@ -146,19 +138,6 @@ final class TranslationViewModel {
     /// con el atajo global, sin tener que hacer click primero en el área.
     func requestInputFocus() {
         focusInputToken &+= 1
-    }
-
-    // MARK: - TTS (botón 🔊)
-
-    /// Lee la traducción en voz alta con la voz nativa del idioma destino.
-    /// Si ya hay una locución sonando, la corta y empieza otra.
-    func speakOutput() {
-        let text = outputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !text.hasPrefix("⚠️") else { return }
-        speechSynthesizer.stopSpeaking(at: .immediate)
-        let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = AVSpeechSynthesisVoice(language: targetLanguage.speechLocale)
-        speechSynthesizer.speak(utterance)
     }
 
     // MARK: - Traducir el portapapeles al abrir
