@@ -307,8 +307,8 @@ final class TranslationViewModel {
 
     /// Pasa `inputText` por el detector y, si hay un idioma fiable,
     /// actualiza `sourceLanguage` para que el picker refleje la detección.
-    /// Se invoca tanto cuando el usuario eligió `.autoDetect` en el picker
-    /// como cuando tiene activo el ajuste legacy `autoDetectLanguage`.
+    /// Se invoca cuando el usuario eligió `.autoDetect` en el picker o tiene
+    /// activo el ajuste `autoDetectLanguage` en Configuración.
     private func updateDetectedLanguage() {
         guard let detected = detectLanguage(for: inputText) else { return }
         guard detected != sourceLanguage else { return }

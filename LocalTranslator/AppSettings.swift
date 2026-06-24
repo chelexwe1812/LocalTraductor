@@ -28,6 +28,20 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         case .english: return Locale(identifier: "en")
         }
     }
+
+    /// Primer idioma soportado dentro de `Locale.preferredLanguages`. Si el
+    /// sistema está configurado en algo que no tenemos traducido (japonés,
+    /// francés…), caemos a inglés como mínimo común denominador. Se usa solo
+    /// en el primer arranque, antes de que el usuario elija algo en
+    /// Configuración.
+    static var systemPreferred: AppLanguage {
+        for code in Locale.preferredLanguages {
+            let prefix = code.lowercased().prefix(2)
+            if prefix == "es" { return .spanish }
+            if prefix == "en" { return .english }
+        }
+        return .english
+    }
 }
 
 /// Nombre legible del tono para mostrar en el menú. Vive aquí (capa SwiftUI)
@@ -176,23 +190,9 @@ final class AppSettings {
         // .bool(forKey:) devuelve false si no existe → defaults seguros.
         self.autoTranslate = d.bool(forKey: Keys.autoTranslate)
         self.autoCopy = d.bool(forKey: Keys.autoCopy)
-        // Defaults a `true` para autoDetect y clearOnDismiss: solo si nunca
-        // se guardaron, usamos true.
-        if d.object(forKey: Keys.autoDetectLanguage) == nil {
-            self.autoDetectLanguage = true
-        } else {
-            self.autoDetectLanguage = d.bool(forKey: Keys.autoDetectLanguage)
-        }
-        if d.object(forKey: Keys.clearOnDismiss) == nil {
-            self.clearOnDismiss = true
-        } else {
-            self.clearOnDismiss = d.bool(forKey: Keys.clearOnDismiss)
-        }
-        if d.object(forKey: Keys.translateClipboardOnOpen) == nil {
-            self.translateClipboardOnOpen = true
-        } else {
-            self.translateClipboardOnOpen = d.bool(forKey: Keys.translateClipboardOnOpen)
-        }
+        self.autoDetectLanguage = Self.bool(d, key: Keys.autoDetectLanguage, default: true)
+        self.clearOnDismiss = Self.bool(d, key: Keys.clearOnDismiss, default: true)
+        self.translateClipboardOnOpen = Self.bool(d, key: Keys.translateClipboardOnOpen, default: true)
         if let raw = d.string(forKey: Keys.colorScheme),
            let pref = ColorSchemePreference(rawValue: raw) {
             self.colorScheme = pref
@@ -203,7 +203,7 @@ final class AppSettings {
            let lang = AppLanguage(rawValue: raw) {
             self.appLanguage = lang
         } else {
-            self.appLanguage = .english
+            self.appLanguage = .systemPreferred
         }
         if let raw = d.string(forKey: Keys.translationTone),
            let tone = TranslationTone(rawValue: raw) {
@@ -218,6 +218,14 @@ final class AppSettings {
             self.toolbarPosition = .top
         }
         self.hasShownWelcome = d.bool(forKey: Keys.hasShownWelcome)
+    }
+
+    /// Lee un `Bool` aplicando un default explícito cuando la clave nunca se
+    /// guardó. `UserDefaults.bool(forKey:)` devuelve `false` para claves
+    /// inexistentes, lo que mezcla "el usuario lo desactivó" con "nunca lo
+    /// tocó". Aquí distinguimos los dos casos con `object(forKey:) == nil`.
+    private static func bool(_ defaults: UserDefaults, key: String, default defaultValue: Bool) -> Bool {
+        defaults.object(forKey: key) == nil ? defaultValue : defaults.bool(forKey: key)
     }
 
     private enum Keys {

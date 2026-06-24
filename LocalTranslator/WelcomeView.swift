@@ -74,11 +74,11 @@ struct WelcomeRootView: View {
         .padding(.vertical, 32)
         .background(backgroundLayer)
         .preferredColorScheme(settings.colorScheme.colorScheme)
-        // La bienvenida es onboarding: aún no hay forma de elegir idioma,
-        // así que la dejamos siempre en inglés (el default de la app) y no
-        // dependemos de un valor que el usuario podría haber dejado en
-        // español de una instalación previa.
-        .environment(\.locale, Locale(identifier: "en"))
+        // En primer arranque, `appLanguage` arranca desde `systemPreferred`:
+        // español si la Mac está en español, inglés en cualquier otro idioma.
+        // Reusamos el mismo locale que el resto de la app para que la
+        // onboarding mantenga coherencia con lo que el usuario verá después.
+        .environment(\.locale, settings.appLanguage.locale)
         .onDisappear { simulationTask?.cancel() }
     }
 

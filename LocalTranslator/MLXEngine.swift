@@ -4,6 +4,7 @@ import MLXLMCommon
 import MLXHuggingFace
 import HuggingFace
 import Tokenizers
+import OSLog
 
 /// Motor de traducción real. Usa MLX para correr un LLM cuantizado
 /// en 4-bit sobre Apple Silicon.
@@ -27,6 +28,12 @@ actor MLXEngine: TranslationEngine {
     /// La creamos una sola vez en `loadModel()` y la reutilizamos.
     private var session: ChatSession?
 
+    /// Canal de logs visible en Console.app filtrando por subsystem
+    /// `LocalTranslator` / category `MLXEngine`. `nonisolated` para poder
+    /// usarlo desde los closures `@Sendable` del progreso de descarga sin
+    /// salto al actor.
+    private nonisolated let log = Logger(subsystem: "LocalTranslator", category: "MLXEngine")
+
     init(modelID: String = "mlx-community/Qwen3-4B-Instruct-2507-4bit") {
         self.modelID = modelID
     }
@@ -34,12 +41,12 @@ actor MLXEngine: TranslationEngine {
     // MARK: - Carga del modelo
 
     func loadModel(progressHandler: (@Sendable (Double) -> Void)? = nil) async throws {
-        print("[MLXEngine] Iniciando carga del modelo: \(modelID)")
+        log.info("Iniciando carga del modelo: \(self.modelID, privacy: .public)")
         let configuration = ModelConfiguration(id: modelID)
 
         // 1) Descarga (la primera vez) + carga en memoria.
-        //    Imprimimos progreso a la consola y, si nos pasaron handler,
-        //    se lo reportamos también para que la UI lo refleje.
+        //    Reportamos el progreso al logger y, si nos pasaron handler,
+        //    también se lo entregamos para que la UI lo refleje.
         let model: ModelContext
         do {
             model = try await loadMLXModelContext(for: configuration) { progress in
@@ -52,14 +59,14 @@ actor MLXEngine: TranslationEngine {
                     fromByteCount: progress.totalUnitCount,
                     countStyle: .file
                 )
-                print("[MLXEngine] Descarga \(pct)% (\(done) / \(total))")
+                self.log.debug("Descarga \(pct)% (\(done, privacy: .public) / \(total, privacy: .public))")
                 progressHandler?(progress.fractionCompleted)
             }
         } catch {
-            print("[MLXEngine] ❌ Fallo cargando modelo: \(error)")
+            log.error("Fallo cargando modelo: \(error.localizedDescription, privacy: .public)")
             throw error
         }
-        print("[MLXEngine] ✅ Modelo cargado en memoria")
+        log.info("Modelo cargado en memoria")
 
         // 2) Parámetros de generación pensados para traducción:
         //    - temperatura baja => salida estable y poco creativa.
