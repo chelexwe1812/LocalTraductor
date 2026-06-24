@@ -6,6 +6,12 @@ struct ContentView: View {
     @Environment(TranslationViewModel.self) private var viewModel
     private let settings = AppSettings.shared
 
+    /// Foco del `TextEditor` de entrada. Se activa al abrir el popover
+    /// (al aparecer la vista y cada vez que el ViewModel incrementa su
+    /// `focusInputToken`) para que el usuario pueda escribir sin tener
+    /// que hacer click primero en el área.
+    @FocusState private var isInputFocused: Bool
+
     /// ID estable del ancla al final del scroll de salida. Lo usa
     /// `ScrollViewReader` para hacer auto-scroll mientras llega el stream.
     private let outputBottomID = "outputBottom"
@@ -54,6 +60,19 @@ struct ContentView: View {
             guard !trimmed.isEmpty else { return }
             viewModel.translate()
         }
+        // Halo Siri envolviendo TODA la ventana, solo la primera vez que se
+        // abre el traductor tras la pantalla de bienvenida. El glow del área
+        // de salida durante traducciones (más abajo) sigue independiente.
+        .overlay { SiriGlow(isTranslating: viewModel.firstOpenGlow) }
+        // Cada vez que el StatusBarController pida foco (al abrir el popover)
+        // el ViewModel incrementa `focusInputToken`; aquí devolvemos el foco
+        // al TextEditor para que el usuario pueda teclear inmediatamente.
+        .onChange(of: viewModel.focusInputToken) { _, _ in
+            if viewModel.screen == .translator {
+                isInputFocused = true
+            }
+        }
+        .onAppear { isInputFocused = true }
     }
 
     // MARK: - Vista del traductor
@@ -91,6 +110,7 @@ struct ContentView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .focused($isInputFocused)
             // Sin background aquí: el tinte del input se aplica a nivel
             // popover en `StatusBarController` para que la flecha que apunta
             // al icono del menubar comparta color con esta sección.
@@ -135,25 +155,21 @@ struct ContentView: View {
         // Borde arcoíris estilo Siri: aparece cuando arranca una traducción
         // y se desvanece cuando termina. El overlay no captura clics.
         .overlay { SiriGlow(isTranslating: viewModel.isTranslating) }
-        // Progress + copia como overlay en la esquina superior derecha,
-        // así no roban espacio vertical al texto traducido.
+        // Botón de copia en la esquina superior derecha, así no roba
+        // espacio vertical al texto traducido. El indicador de "traduciendo"
+        // ya lo da el halo Siri arcoíris alrededor del output, no hace
+        // falta un spinner aquí.
         .overlay(alignment: .topTrailing) {
-            HStack(spacing: 8) {
-                if viewModel.isTranslating {
-                    ProgressView()
-                        .controlSize(.small)
+            if !viewModel.outputText.isEmpty {
+                Button {
+                    copyToClipboard(viewModel.outputText)
+                } label: {
+                    Image(systemName: "doc.on.doc")
                 }
-                if !viewModel.outputText.isEmpty {
-                    Button {
-                        copyToClipboard(viewModel.outputText)
-                    } label: {
-                        Image(systemName: "doc.on.doc")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Copiar traducción")
-                }
+                .buttonStyle(.borderless)
+                .help("Copiar traducción")
+                .padding(8)
             }
-            .padding(8)
         }
     }
 

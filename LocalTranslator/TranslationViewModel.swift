@@ -55,6 +55,23 @@ final class TranslationViewModel {
     var modelState: ModelState = .idle
     var isTranslating: Bool = false
 
+    /// Progreso (0…1) de la descarga del modelo. Lo consume la pantalla de
+    /// bienvenida para pintar la barra. Se mantiene en 0 cuando no estamos
+    /// descargando.
+    var downloadProgress: Double = 0
+    /// `true` mientras dura la fase de descarga del modelo (primera carga).
+    var isDownloadingModel: Bool = false
+
+    /// Bandera momentánea que dispara un halo Siri rodeando toda la ventana
+    /// del traductor justo cuando se abre por primera vez después de la
+    /// pantalla de bienvenida. Una vez celebrado, vuelve a `false`.
+    var firstOpenGlow: Bool = false
+
+    /// Contador que la vista observa para devolver el foco al `TextEditor`
+    /// de entrada cada vez que se abre el popover (por icono o atajo). Lo
+    /// incrementamos en `requestInputFocus()` y la vista hace `onChange`.
+    var focusInputToken: Int = 0
+
     // MARK: - Dependencias y tareas internas
     private let engine: TranslationEngine
     private let settings: AppSettings
@@ -80,12 +97,19 @@ final class TranslationViewModel {
     // MARK: - Carga del modelo
     func loadModel() async {
         modelState = .loading
+        isDownloadingModel = true
+        downloadProgress = 0
         do {
-            try await engine.loadModel()
+            try await engine.loadModel { [weak self] progress in
+                Task { @MainActor [weak self] in
+                    self?.downloadProgress = progress
+                }
+            }
             modelState = .ready
         } catch {
             modelState = .failed(error.localizedDescription)
         }
+        isDownloadingModel = false
     }
 
     // MARK: - Limpiar la entrada y la salida
@@ -103,6 +127,25 @@ final class TranslationViewModel {
     /// Vuelve a la pantalla del traductor (se invoca al cerrarse el popover).
     func resetToTranslator() {
         screen = .translator
+    }
+
+    /// Dispara un halo Siri momentáneo alrededor de todo el ContentView,
+    /// para celebrar la primera apertura del traductor tras la pantalla de
+    /// bienvenida. El propio `SiriGlow` hace fade-in/out; aquí solo dejamos
+    /// la bandera encendida 0.7 s para que la fase visible dure ~1 s.
+    func celebrateFirstOpen() {
+        firstOpenGlow = true
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(700))
+            self?.firstOpenGlow = false
+        }
+    }
+
+    /// Pide a la vista que devuelva el foco al `TextEditor` de entrada.
+    /// El usuario debe poder teclear inmediatamente tras abrir el popover
+    /// con el atajo global, sin tener que hacer click primero en el área.
+    func requestInputFocus() {
+        focusInputToken &+= 1
     }
 
     // MARK: - TTS (botón 🔊)

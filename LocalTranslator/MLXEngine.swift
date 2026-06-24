@@ -33,12 +33,13 @@ actor MLXEngine: TranslationEngine {
 
     // MARK: - Carga del modelo
 
-    func loadModel() async throws {
+    func loadModel(progressHandler: (@Sendable (Double) -> Void)? = nil) async throws {
         print("[MLXEngine] Iniciando carga del modelo: \(modelID)")
         let configuration = ModelConfiguration(id: modelID)
 
         // 1) Descarga (la primera vez) + carga en memoria.
-        //    Imprimimos progreso a la consola para poder ver descargas.
+        //    Imprimimos progreso a la consola y, si nos pasaron handler,
+        //    se lo reportamos también para que la UI lo refleje.
         let model: ModelContext
         do {
             model = try await loadMLXModelContext(for: configuration) { progress in
@@ -52,6 +53,7 @@ actor MLXEngine: TranslationEngine {
                     countStyle: .file
                 )
                 print("[MLXEngine] Descarga \(pct)% (\(done) / \(total))")
+                progressHandler?(progress.fractionCompleted)
             }
         } catch {
             print("[MLXEngine] ❌ Fallo cargando modelo: \(error)")
