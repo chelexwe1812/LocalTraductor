@@ -19,7 +19,6 @@ final class WelcomeWindowController: NSObject, NSWindowDelegate {
     private var didFinish = false
 
     init(viewModel: TranslationViewModel,
-         simulateDownload: Bool,
          onFinish: @escaping () -> Void) {
         self.viewModel = viewModel
         self.onFinish = onFinish
@@ -51,7 +50,6 @@ final class WelcomeWindowController: NSObject, NSWindowDelegate {
         let hosting = NSHostingController(
             rootView: WelcomeRootView(
                 viewModel: viewModel,
-                simulateDownload: simulateDownload,
                 onFinish: { [weak self] in
                     self?.finishAndClose()
                 }

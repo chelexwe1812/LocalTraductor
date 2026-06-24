@@ -3,27 +3,17 @@ import SwiftUI
 /// Vista raíz de la pantalla de bienvenida. Vive dentro de una `NSWindow`
 /// independiente y centrada gestionada por `WelcomeWindowController`.
 ///
-/// Se compone de dos pasos:
-/// - `.intro`: explica brevemente qué es la app y la característica de tonos,
-///   con un botón "Continuar".
+/// Se compone de tres pasos:
+/// - `.intro`: explica brevemente qué es la app y la característica de tonos.
+/// - `.confirm`: resume el modelo y pide confirmación antes de descargar.
 /// - `.downloading`: muestra una barra de progreso mientras se descarga el
 ///   modelo. Cuando termina aparece el botón "Empezar a usar".
-///
-/// En modo *simulación* (caso debug) la barra de progreso no observa el
-/// `TranslationViewModel`; usa un contador interno que sube de 0 a 100 en
-/// ~2.5 s. En paralelo lanzamos la carga real del modelo para que la app
-/// quede lista al cerrar la ventana — si el modelo ya está en disco, esta
-/// carga es casi instantánea.
 struct WelcomeRootView: View {
 
     let viewModel: TranslationViewModel
-    let simulateDownload: Bool
     let onFinish: () -> Void
 
     @State private var step: Step = .intro
-    @State private var simulatedProgress: Double = 0
-    @State private var simulatedDone: Bool = false
-    @State private var simulationTask: Task<Void, Never>?
 
     /// Coreografía de la transición al completarse la descarga: el icono
     /// de descarga se encoge, se sustituye por el check verde con un "pop"
@@ -40,19 +30,15 @@ struct WelcomeRootView: View {
         case downloading
     }
 
-    /// Valor que pintamos en la barra. En modo simulación viene de un
-    /// contador interno; si no, del `TranslationViewModel`.
+    /// Progreso real de la descarga reportado por el `TranslationViewModel`.
     private var progress: Double {
-        simulateDownload ? simulatedProgress : viewModel.downloadProgress
+        viewModel.downloadProgress
     }
 
-    /// `true` cuando la descarga (real o simulada) está terminada y el
-    /// botón "Empezar a usar" debe aparecer.
+    /// `true` cuando la descarga ha terminado y el botón "Empezar a usar"
+    /// debe aparecer.
     private var isReady: Bool {
-        if simulateDownload {
-            return simulatedDone
-        }
-        return viewModel.modelState == .ready
+        viewModel.modelState == .ready
     }
 
     var body: some View {
@@ -79,7 +65,6 @@ struct WelcomeRootView: View {
         // Reusamos el mismo locale que el resto de la app para que la
         // onboarding mantenga coherencia con lo que el usuario verá después.
         .environment(\.locale, settings.appLanguage.locale)
-        .onDisappear { simulationTask?.cancel() }
     }
 
     /// Fondo de la ventana: capa base + gradiente sutil hacia azul oscuro
@@ -519,40 +504,17 @@ struct WelcomeRootView: View {
 
     // MARK: - Lógica
 
-    /// Lanza la descarga: el `loadModel()` real siempre se ejecuta (para que
-    /// al cerrar la ventana la app esté lista), y en modo simulación además
-    /// arrancamos un contador interno que pinta la barra de 0 a 100% en
-    /// ~2.5 s, independientemente de la velocidad real.
+    /// Lanza la descarga real en background. El ViewModel ya gestiona
+    /// `modelState` y `downloadProgress`, que esta vista observa.
     private func startDownload() {
         iconScale = 1.0
-
-        // Carga real del modelo en background. El ViewModel ya gestiona
-        // `modelState` y `downloadProgress`.
         Task { await viewModel.loadModel() }
-
-        if simulateDownload {
-            simulationTask?.cancel()
-            simulationTask = Task { @MainActor in
-                simulatedProgress = 0
-                simulatedDone = false
-                // 100 pasos × 60 ms ≈ 6 s. Suficiente para apreciar el halo
-                // Siri, la transición de porcentajes y el ETA dinámico antes
-                // del efecto de celebración.
-                for i in 1...100 {
-                    if Task.isCancelled { return }
-                    try? await Task.sleep(for: .milliseconds(60))
-                    simulatedProgress = Double(i) / 100.0
-                }
-                simulatedDone = true
-            }
-        }
     }
 }
 
 #Preview("Intro") {
     WelcomeRootView(
         viewModel: TranslationViewModel(engine: MockEngine()),
-        simulateDownload: true,
         onFinish: {}
     )
 }

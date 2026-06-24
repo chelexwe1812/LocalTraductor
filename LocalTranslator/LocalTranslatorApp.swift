@@ -43,11 +43,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// no se libere antes de tiempo.
     private var welcomeWindow: WelcomeWindowController?
 
-    /// Usuario del sistema para el que SIEMPRE mostramos la pantalla de
-    /// bienvenida (modo debug). Para cualquier otro usuario, la pantalla
-    /// solo aparece la primera vez.
-    private let debugUserName = "marcelo"
-
     func applicationDidFinishLaunching(_ notification: Notification) {
         Task { @MainActor in
             // ViewModel a nivel de app: el modelo MLX permanece cargado
@@ -93,34 +88,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
 
-            // Decisión: ¿mostramos la pantalla de bienvenida?
-            // - Para el usuario debug: SIEMPRE (con descarga simulada).
-            // - Para el resto: solo la primera vez (hasShownWelcome == false).
-            let isDebugUser = NSUserName() == debugUserName
-            let shouldShowWelcome = isDebugUser || !AppSettings.shared.hasShownWelcome
-
-            if shouldShowWelcome {
-                // La welcome window controla la llamada a `loadModel()`.
-                showWelcomeWindow(viewModel: vm, simulateDownload: isDebugUser)
+            // La pantalla de bienvenida solo aparece en el primer arranque
+            // (mientras `hasShownWelcome == false`). Después se va directo
+            // al traductor cargando el modelo en background.
+            if !AppSettings.shared.hasShownWelcome {
+                showWelcomeWindow(viewModel: vm)
             } else {
-                // Flujo normal: cargamos el modelo en segundo plano.
                 await vm.loadModel()
             }
         }
     }
 
     @MainActor
-    private func showWelcomeWindow(viewModel: TranslationViewModel,
-                                   simulateDownload: Bool) {
+    private func showWelcomeWindow(viewModel: TranslationViewModel) {
         let controller = WelcomeWindowController(
             viewModel: viewModel,
-            simulateDownload: simulateDownload,
             onFinish: { [weak self, weak viewModel] in
-                // Para usuarios normales marcamos que ya vimos la bienvenida.
-                // Al debug user no le marcamos nada: queremos verla siempre.
-                if !simulateDownload {
-                    AppSettings.shared.hasShownWelcome = true
-                }
+                AppSettings.shared.hasShownWelcome = true
                 self?.welcomeWindow = nil
 
                 // Al terminar la bienvenida abrimos el popover del traductor
