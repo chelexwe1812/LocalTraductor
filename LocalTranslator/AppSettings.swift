@@ -163,6 +163,14 @@ final class AppSettings {
         didSet { UserDefaults.standard.set(toolbarPosition.rawValue, forKey: Keys.toolbarPosition) }
     }
 
+    /// Indica si la pantalla de bienvenida ya se mostró en algún arranque
+    /// previo. La primera vez que el usuario abre la app se queda en `false`
+    /// para que vea la intro y la descarga del modelo; después se queda en
+    /// `true` y la app arranca directamente al traductor.
+    var hasShownWelcome: Bool {
+        didSet { UserDefaults.standard.set(hasShownWelcome, forKey: Keys.hasShownWelcome) }
+    }
+
     private init() {
         let d = UserDefaults.standard
         // .bool(forKey:) devuelve false si no existe → defaults seguros.
@@ -195,7 +203,7 @@ final class AppSettings {
            let lang = AppLanguage(rawValue: raw) {
             self.appLanguage = lang
         } else {
-            self.appLanguage = .spanish
+            self.appLanguage = .english
         }
         if let raw = d.string(forKey: Keys.translationTone),
            let tone = TranslationTone(rawValue: raw) {
@@ -209,6 +217,7 @@ final class AppSettings {
         } else {
             self.toolbarPosition = .top
         }
+        self.hasShownWelcome = d.bool(forKey: Keys.hasShownWelcome)
     }
 
     private enum Keys {
@@ -221,5 +230,6 @@ final class AppSettings {
         static let appLanguage = "appLanguage"
         static let translationTone = "translationTone"
         static let toolbarPosition = "toolbarPosition"
+        static let hasShownWelcome = "hasShownWelcome"
     }
 }

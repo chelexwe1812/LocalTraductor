@@ -31,9 +31,11 @@ enum TranslationTone: String, CaseIterable, Identifiable, Hashable {
 /// Contrato que todo motor de traducción debe cumplir.
 /// Hoy lo implementará un motor falso (mock); mañana, MLX con un modelo real.
 /// La UI no necesita saber cuál se usa.
-protocol TranslationEngine {
+protocol TranslationEngine: Sendable {
     /// Carga el modelo en memoria. Puede tardar, por eso es async.
-    func loadModel() async throws
+    /// El `progressHandler` opcional recibe valores entre 0 y 1 mientras
+    /// se descargan los pesos del modelo (solo aplica la primera vez).
+    func loadModel(progressHandler: (@Sendable (Double) -> Void)?) async throws
 
     /// Traduce un texto de un idioma a otro emitiendo deltas (fragmentos)
     /// según los va generando el modelo. La UI concatena los chunks para
@@ -43,4 +45,11 @@ protocol TranslationEngine {
                    from source: Language,
                    to target: Language,
                    tone: TranslationTone) async throws -> AsyncThrowingStream<String, Error>
+}
+
+extension TranslationEngine {
+    /// Atajo cuando no necesitamos seguir el progreso.
+    func loadModel() async throws {
+        try await loadModel(progressHandler: nil)
+    }
 }

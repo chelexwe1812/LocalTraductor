@@ -38,6 +38,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var viewModel: TranslationViewModel?
     private var statusBar: StatusBarController?
+    /// Controlador de la ventana de bienvenida. `nil` cuando ya se cerró
+    /// o cuando no se debía mostrar. Lo retenemos aquí para que la ventana
+    /// no se libere antes de tiempo.
+    private var welcomeWindow: WelcomeWindowController?
+
+    /// Usuario del sistema para el que SIEMPRE mostramos la pantalla de
+    /// bienvenida (modo debug). Para cualquier otro usuario, la pantalla
+    /// solo aparece la primera vez.
+    private let debugUserName = "marcelo"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Task { @MainActor in
@@ -63,6 +72,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 onPopoverWillShow: { [weak vm] in
                     // Si el portapapeles trae texto nuevo, lo pega y traduce.
                     vm?.translateClipboardOnOpenIfNeeded()
+                    // Devolvemos el foco al input para que el atajo global
+                    // permita teclear sin hacer click primero.
+                    vm?.requestInputFocus()
                 },
                 onOpenSettings: { [weak vm] in
                     vm?.screen = .settings
@@ -81,9 +93,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
 
-            // Carga del modelo en segundo plano nada más arrancar.
-            await vm.loadModel()
+            // Decisión: ¿mostramos la pantalla de bienvenida?
+            // - Para el usuario debug: SIEMPRE (con descarga simulada).
+            // - Para el resto: solo la primera vez (hasShownWelcome == false).
+            let isDebugUser = NSUserName() == debugUserName
+            let shouldShowWelcome = isDebugUser || !AppSettings.shared.hasShownWelcome
+
+            if shouldShowWelcome {
+                // La welcome window controla la llamada a `loadModel()`.
+                showWelcomeWindow(viewModel: vm, simulateDownload: isDebugUser)
+            } else {
+                // Flujo normal: cargamos el modelo en segundo plano.
+                await vm.loadModel()
+            }
         }
+    }
+
+    @MainActor
+    private func showWelcomeWindow(viewModel: TranslationViewModel,
+                                   simulateDownload: Bool) {
+        let controller = WelcomeWindowController(
+            viewModel: viewModel,
+            simulateDownload: simulateDownload,
+            onFinish: { [weak self, weak viewModel] in
+                // Para usuarios normales marcamos que ya vimos la bienvenida.
+                // Al debug user no le marcamos nada: queremos verla siempre.
+                if !simulateDownload {
+                    AppSettings.shared.hasShownWelcome = true
+                }
+                self?.welcomeWindow = nil
+
+                // Al terminar la bienvenida abrimos el popover del traductor
+                // para que el usuario pueda empezar a traducir al instante,
+                // y disparamos el halo Siri de bienvenida (dura ~1 s).
+                self?.statusBar?.show()
+                viewModel?.celebrateFirstOpen()
+            }
+        )
+        welcomeWindow = controller
+        controller.show()
     }
 
     @MainActor

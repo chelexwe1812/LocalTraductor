@@ -5,9 +5,16 @@ import Foundation
 /// la app antes de integrar el modelo de IA real.
 actor MockEngine: TranslationEngine {
 
-    func loadModel() async throws {
-        // Simulamos que cargar el modelo tarda 1 segundo
-        try await Task.sleep(for: .seconds(1))
+    func loadModel(progressHandler: (@Sendable (Double) -> Void)? = nil) async throws {
+        if let progressHandler {
+            // Reportamos progreso simulado en 10 pasos para ejercitar la UI.
+            for i in 1...10 {
+                try await Task.sleep(for: .milliseconds(100))
+                progressHandler(Double(i) / 10.0)
+            }
+        } else {
+            try await Task.sleep(for: .seconds(1))
+        }
     }
 
     func translate(_ text: String,
